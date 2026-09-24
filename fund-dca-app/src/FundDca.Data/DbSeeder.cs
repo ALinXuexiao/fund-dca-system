@@ -47,7 +47,7 @@ public static class DbSeeder
         {
             new() { Code = "930050", Name = "中证A50", Metric = ValuationMetric.PeTtm, ProxyCode = "000300" },
             new() { Code = "H30269", Name = "中证红利低波动", Metric = ValuationMetric.EarningsYield, LowThresholdPercent = 10m, HighThresholdPercent = 6.4m },
-            new() { Code = "931769", Name = "中证优选300", Metric = ValuationMetric.PeTtm, ProxyCode = "000991" },
+            new() { Code = "931069", Name = "中金300", Metric = ValuationMetric.PeTtm },
             new() { Code = "932047", Name = "中证REITs全收益", Metric = ValuationMetric.None },
             new() { Code = "399393", Name = "国证房地产", Metric = ValuationMetric.Pb },
             new() { Code = "931139", Name = "中证消费50", Metric = ValuationMetric.PeTtm, ProxyCode = "000932" },
@@ -56,7 +56,6 @@ public static class DbSeeder
             new() { Code = "000978", Name = "中证医药100", Metric = ValuationMetric.PeTtm },
             // 代理目标指数
             new() { Code = "000300", Name = "沪深300", Metric = ValuationMetric.PeTtm },
-            new() { Code = "000991", Name = "300价值", Metric = ValuationMetric.PeTtm },
             new() { Code = "000932", Name = "中证主要消费", Metric = ValuationMetric.PeTtm },
         };
         // M2 迁移会以 ON CONFLICT DO NOTHING 幂等补入 HSCGSI / 932047（老库修正）；全新库播种时跳过已存在的指数
@@ -69,7 +68,7 @@ public static class DbSeeder
             New("024393", "永赢恒生消费指数(QDII)A", FundType.Qdii, 7, "HSCGSI"),
             New("022849", "招商中证A50指数增强A", FundType.Stock, 5, "930050"),
             New("020602", "易方达红利低波ETF联接A", FundType.Stock, 6, "H30269"),
-            New("501060", "中金中证优选300指数(LOF)A", FundType.Stock, 4, "931769"),
+            New("501060", "中金中证优选300指数(LOF)A", FundType.Stock, 4, "931069"),
             New("028272", "中金中证REITs全收益指数(FOF)A", FundType.Mixed, 13, "932047"),
             New("160218", "国泰国证房地产行业指数(LOF)A", FundType.Stock, 12, "399393"),
             New("004672", "华夏短债债券A", FundType.Bond, 9, null),

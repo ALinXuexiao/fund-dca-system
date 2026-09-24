@@ -12,6 +12,7 @@ import {
   recordBuy,
   fetchPendingTrades,
   cancelTrade,
+  fetchIntraday,
 } from '../api'
 import {
   FUND_TYPE_LABEL,
@@ -21,6 +22,8 @@ import {
   type DashboardRow,
   type Decision,
   type FundDecision,
+  type Intraday,
+  type IntradayRow,
   type PendingTrade,
   type RefreshResult,
 } from '../types'
@@ -31,6 +34,14 @@ const data = ref<Dashboard | null>(null)
 const decision = ref<Decision | null>(null)
 const refreshing = ref(false)
 const valRefreshing = ref(false)
+
+// 盘中估算（跟踪指数实时行情推算，不落库）：开关打开后每 60 秒自动刷新
+const intradayOn = ref(false)
+const intraday = ref<Intraday | null>(null)
+const intradayLoading = ref(false)
+/** 前端轮询间隔；后端指数行情缓存 30 秒，故 60 秒足够 */
+const INTRADAY_REFRESH_MS = 60_000
+let intradayTimer: number | undefined
 
 const failures = ref<RefreshResult[] | null>(null)
 const valFailures = ref<{ indexCode: string; indexName: string; error: string | null }[] | null>(null)
@@ -159,6 +170,89 @@ async function onRefreshValuations() {
     valRefreshing.value = false
   }
 }
+
+// ---------- 盘中估算 ----------
+
+async function loadIntraday(silent = false) {
+  intradayLoading.value = true
+  try {
+    intraday.value = await fetchIntraday()
+  } catch (e) {
+    if (silent) {
+      console.warn('[intraday] 自动刷新失败', e)
+    } else {
+      showToast(`盘中估算失败：${(e as Error).message}`, true)
+    }
+  } finally {
+    intradayLoading.value = false
+  }
+}
+
+async function toggleIntraday() {
+  if (intradayOn.value) {
+    intradayOn.value = false
+    intraday.value = null
+    window.clearInterval(intradayTimer)
+    intradayTimer = undefined
+    return
+  }
+  intradayOn.value = true
+  await loadIntraday()
+  intradayTimer = window.setInterval(() => void loadIntraday(true), INTRADAY_REFRESH_MS)
+}
+
+const intradayByCode = computed(() => {
+  const map = new Map<string, IntradayRow>()
+  for (const r of intraday.value?.rows ?? []) {
+    map.set(r.fundCode, r)
+  }
+  return map
+})
+
+/** 某只基金的盘中估算行；未开启盘中模式或不可估算时为 null */
+function est(row: DashboardRow): IntradayRow | null {
+  return intradayByCode.value.get(row.code) ?? null
+}
+
+/** 盘中估算今日盈亏：仅累加可估算的行 */
+const estDayPnl = computed(() =>
+  (intraday.value?.rows ?? []).reduce((s, r) => s + (r.estimatedDayPnl ?? 0), 0),
+)
+
+/** 全仓估算市值：可估算的用估算值，其余（债券/货币/无跟踪指数）沿用盘后市值 */
+const estMarketValue = computed(() => {
+  if (!data.value) return 0
+  return data.value.rows.reduce(
+    (s, row) => s + (intradayByCode.value.get(row.code)?.estimatedMarketValue ?? row.marketValue),
+    0,
+  )
+})
+
+function hasEst(row: DashboardRow): boolean {
+  return est(row)?.estimatedNav != null
+}
+
+function estPct(row: DashboardRow): number | null {
+  return est(row)?.indexChangePercent ?? null
+}
+
+function estNavText(row: DashboardRow): string {
+  const e = est(row)
+  return e?.estimatedNav != null ? e.estimatedNav.toFixed(4) : '—'
+}
+
+/** 明细列悬浮说明：用了哪个指数、是否代理、基准净值日期 */
+function estTitle(row: DashboardRow): string {
+  const e = est(row)
+  if (!e) return ''
+  if (e.reason) return `不可估算：${e.reason}`
+  const label = `${e.indexName ?? ''}${e.indexCode ? `（${e.indexCode}）` : ''}`
+  const via = e.viaProxy ? '代理指数：本基金跟踪指数东财无行情，改用档案代理指数推算 ' : '跟踪指数 '
+  return `${via}${label} ${fmtPct(e.indexChangePercent)} · 基准净值 ${e.lastNavDate ?? '—'}`
+}
+
+/** 用代理指数推算的基金数：这些行的估算误差可能较大，需在卡片条上显式提示 */
+const proxyCount = computed(() => (intraday.value?.rows ?? []).filter((r) => r.viaProxy).length)
 
 function startBudgetEdit() {
   if (!data.value?.budget) return
@@ -413,6 +507,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  window.clearInterval(intradayTimer)
   donutChart?.dispose()
   barChart?.dispose()
 })
@@ -448,6 +543,9 @@ watch(
       </div>
       <button class="btn ghost" :disabled="valRefreshing" @click="onRefreshValuations">
         <span v-if="valRefreshing" class="spinner"></span>{{ valRefreshing ? '正在采集指数估值…' : '刷新估值' }}
+      </button>
+      <button class="btn ghost" :class="{ on: intradayOn }" :disabled="intradayLoading" @click="toggleIntraday">
+        {{ intradayOn ? (intradayLoading ? '盘中估算更新中…' : '盘中估算：开（60 秒自动）') : '盘中估算：关' }}
       </button>
       <button class="btn" :disabled="refreshing" @click="onRefresh">
         <span v-if="refreshing" class="spinner"></span>{{ refreshing ? '正在采集天天基金净值…' : '刷新今日净值' }}
@@ -499,6 +597,32 @@ watch(
             <button class="btn sm ghost" style="margin-left:4px" @click="editingBudget = false">取消</button>
           </div>
         </template>
+      </div>
+    </div>
+
+    <!-- 盘中估算条：跟踪指数实时涨跌幅 × 最新确认净值，非实际净值 -->
+    <div v-if="intradayOn && intraday" class="intraday-bar" :class="{ stale: intraday.quoteStale }">
+      <div class="ib-item">
+        <div class="label">盘中估算今日盈亏</div>
+        <div class="value" :class="pctClass(estDayPnl)">{{ estDayPnl >= 0 ? '+' : '' }}¥{{ fmtMoney(estDayPnl) }}</div>
+      </div>
+      <div class="ib-item">
+        <div class="label">全仓估算市值</div>
+        <div class="value">¥{{ fmtMoney(estMarketValue) }}</div>
+      </div>
+      <div class="ib-meta">
+        <div>
+          指数行情：<b>{{ intraday.quotedAt ?? '—' }}</b>
+          <span v-if="intraday.quoteStale" class="badge badge-stale">行情未更新（休市/午休或数据源异常）</span>
+        </div>
+        <div>可估算 {{ intraday.coveredCount }} 只 · 不可估算 {{ intraday.unavailableCount }} 只（见明细「盘中估算」列悬浮说明）</div>
+        <div v-if="proxyCount > 0" class="warn-line">
+          其中 {{ proxyCount }} 只用的是档案里的代理指数（本基金跟踪指数东财无行情），误差可能较大，请以实际净值为准
+        </div>
+        <div class="disc">
+          口径：跟踪指数实时涨跌幅 × 最新确认净值推算，非实际净值。指数基金贴合度高；指数增强/联接有跟踪误差，
+          QDII 叠加汇率与净值滞后，仅供参考，实际以基金公司披露净值为准。
+        </div>
       </div>
     </div>
 
@@ -681,6 +805,7 @@ watch(
           <col style="width:86px" />
           <col style="width:74px" />
           <col style="width:96px" />
+          <col style="width:96px" />
           <col style="width:104px" />
           <col style="width:74px" />
           <col style="width:96px" />
@@ -693,6 +818,7 @@ watch(
             <th>净值日期</th>
             <th>单位净值</th>
             <th>日涨跌</th>
+            <th>盘中估算<span class="th-sub">指数推算</span></th>
             <th>份额</th>
             <th>当前市值</th>
             <th>占比 D</th>
@@ -713,6 +839,13 @@ watch(
             </td>
             <td>{{ r.unitNav != null ? r.unitNav.toFixed(4) : '—' }}</td>
             <td :class="pctClass(r.dayChangePercent)">{{ r.isMoney ? '—' : fmtPct(r.dayChangePercent) }}</td>
+            <td :title="estTitle(r)">
+              <template v-if="hasEst(r)">
+                <span :class="pctClass(estPct(r))">{{ fmtPct(estPct(r)) }}</span>
+                <div class="est-nav">{{ estNavText(r) }}</div>
+              </template>
+              <span v-else style="color:var(--muted)">{{ intradayOn ? '—' : '' }}</span>
+            </td>
             <td>{{ r.shares != null ? r.shares.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) : '—' }}</td>
             <td>
               <template v-if="r.isMoney && editingCode === r.code">
@@ -896,5 +1029,55 @@ tr.rowzero td { opacity: .62; }
   line-height: 1.6;
   border-top: 1px dashed var(--line);
   background: #fafbfc;
+}
+
+/* ---------- 盘中估算 ---------- */
+.btn.ghost.on {
+  background: #eef3fe;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.intraday-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+  flex-wrap: wrap;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border-left: 3px solid var(--accent);
+  padding: 14px 20px;
+  margin-bottom: 18px;
+}
+.intraday-bar.stale { border-left-color: var(--warn); }
+
+.ib-item { min-width: 168px; }
+.ib-item .label { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.ib-item .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+
+.ib-meta {
+  flex: 1;
+  min-width: 260px;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.ib-meta b { font-variant-numeric: tabular-nums; }
+.ib-meta .warn-line { color: var(--warn); }
+.ib-meta .disc {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+/* 盘中估算列：主行涨跌幅 + 副行估算净值 */
+.est-nav {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
 </style>

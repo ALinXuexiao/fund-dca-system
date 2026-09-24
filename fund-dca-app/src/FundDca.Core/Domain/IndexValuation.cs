@@ -28,7 +28,7 @@ public class IndexValuation
     /// <summary>实际取数的外部指数代码（与 IndexCode 不同即代理估值），如 SH000300</summary>
     public string? ResolvedCode { get; set; }
 
-    /// <summary>数据源：DANJUAN / MANUAL</summary>
+    /// <summary>数据源：DANJUAN（蛋卷）/ CSI（中证官网自有PE）/ MANUAL</summary>
     public string Source { get; set; } = "DANJUAN";
 
     public DateTimeOffset FetchedAt { get; set; }

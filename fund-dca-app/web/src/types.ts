@@ -75,6 +75,37 @@ export interface RefreshResult {
   error: string | null
 }
 
+// ---------- 盘中估算（跟踪指数实时涨跌幅 × 最新确认净值，不落库） ----------
+
+export interface IntradayRow {
+  fundCode: string
+  /** 实际取数的指数代码（走代理指数时与基金跟踪指数不同） */
+  indexCode: string | null
+  indexName: string | null
+  /** 是否用档案配置的代理指数代为估算 */
+  viaProxy: boolean
+  /** 指数盘中涨跌幅 % */
+  indexChangePercent: number | null
+  lastNav: number | null
+  lastNavDate: string | null
+  /** 估算盘中净值 */
+  estimatedNav: number | null
+  estimatedMarketValue: number | null
+  /** 估算今日盈亏额 */
+  estimatedDayPnl: number | null
+  /** 不可估算原因；可估算时为空 */
+  reason: string | null
+}
+
+export interface Intraday {
+  quotedAt: string | null
+  /** 行情超过 5 分钟未更新（休市/午休/数据源异常） */
+  quoteStale: boolean
+  coveredCount: number
+  unavailableCount: number
+  rows: IntradayRow[]
+}
+
 export interface RefreshReport {
   finishedAt: string
   successCount: number

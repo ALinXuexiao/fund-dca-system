@@ -10,6 +10,7 @@ import type {
   CommitResult,
   ImportPreview,
   PositionVersion,
+  Intraday,
 } from './types'
 
 async function getJson<T>(url: string): Promise<T> {
@@ -30,6 +31,14 @@ export function fetchFunds(): Promise<FundListItem[]> {
 
 export function fetchDashboard(): Promise<Dashboard> {
   return getJson('/api/dashboard')
+}
+
+/**
+ * 盘中估算：跟踪指数实时涨跌幅 × 最新确认净值 → 估算净值/市值/今日盈亏。
+ * 后端对指数行情缓存 30 秒，前端按 60 秒轮询即可。
+ */
+export function fetchIntraday(): Promise<Intraday> {
+  return getJson('/api/dashboard/intraday')
 }
 
 /** 立即拉取全部基金最新净值（后端内部对单只基金静默重试 5 次）。 */

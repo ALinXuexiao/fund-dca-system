@@ -39,6 +39,7 @@ builder.Services.AddDbContext<FundDcaDbContext>((sp, o) => o
 builder.Services.AddFundDcaCollector(builder.Configuration);
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<IntradayService>();
 builder.Services.AddScoped<DecisionService>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<ImportService>();

@@ -35,6 +35,7 @@ public sealed record ValuationRefreshReport(
 public sealed class ValuationRefreshService(
     FundDcaDbContext db,
     DanJuanValuationSource source,
+    CsiIndexPeSource csiSource,
     ILogger<ValuationRefreshService> logger)
 {
     public async Task<ValuationRefreshReport> RefreshAsync(CancellationToken ct)
@@ -100,6 +101,60 @@ public sealed class ValuationRefreshService(
 
             if (!quotes.TryGetValue(resolvedCode, out var q))
             {
+                // 蛋卷（含代理）未覆盖：PE 口径取中证官网该指数自有 PE 历史，按配置窗口现算百分位。
+                // 不用"代理估值"记账——这是本指数自己的估值水平。
+                if (idx.Metric == ValuationMetric.PeTtm)
+                {
+                    IReadOnlyList<CsiPePoint> series;
+                    try
+                    {
+                        series = await csiSource.FetchPeHistoryAsync(idx.Code, idx.WindowYears, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "中证官网 PE 拉取失败：{Code}", idx.Code);
+                        series = [];
+                    }
+
+                    if (series.Count > 0)
+                    {
+                        var latest = series[^1];
+                        var pePercentile = Math.Round(
+                            100m * series.Count(p => p.Pe <= latest.Pe) / series.Count, 2);
+
+                        var existingCsi = await db.IndexValuations
+                            .FirstOrDefaultAsync(v => v.IndexCode == idx.Code && v.TradeDate == latest.TradeDate, ct);
+
+                        if (existingCsi is null)
+                        {
+                            db.IndexValuations.Add(new IndexValuation
+                            {
+                                IndexCode = idx.Code,
+                                TradeDate = latest.TradeDate,
+                                PeTtm = latest.Pe,
+                                PePercentile = pePercentile,
+                                Source = "CSI",
+                                FetchedAt = now,
+                            });
+                        }
+                        else
+                        {
+                            existingCsi.PeTtm = latest.Pe;
+                            existingCsi.PePercentile = pePercentile;
+                            existingCsi.Pb = null;
+                            existingCsi.PbPercentile = null;
+                            existingCsi.ResolvedCode = null;
+                            existingCsi.Source = "CSI";
+                            existingCsi.FetchedAt = now;
+                        }
+
+                        await db.SaveChangesAsync(ct);
+                        results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
+                            latest.TradeDate.ToString("yyyy-MM-dd"), false, null, pePercentile, null, null));
+                        continue;
+                    }
+                }
+
                 results.Add(new ValuationRefreshResult(idx.Code, idx.Name, false, null, viaProxy, resolvedCode,
                     null, null, "数据源未覆盖该指数（可在档案中配置代理指数）"));
                 continue;
