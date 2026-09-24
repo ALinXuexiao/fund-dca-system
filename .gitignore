@@ -1,0 +1,69 @@
+# =======================
+# .NET / C#
+# =======================
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.csproj.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Visual Studio
+.vs/
+.idea/
+.vscode/
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# =======================
+# 敏感配置文件（含密码）
+# =======================
+**/appsettings.json
+**/appsettings.*.json
+!**/appsettings.example.json
+!**/appsettings.*.example.json
+
+# =======================
+# 前端 (Node / Vue)
+# =======================
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =======================
+# 系统文件
+# =======================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =======================
+# 临时文件
+# =======================
+*.tmp
+*.bak
+*.swp
+*~

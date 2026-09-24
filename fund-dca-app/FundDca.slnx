@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FundDca.Api/FundDca.Api.csproj" />
+    <Project Path="src/FundDca.Collect/FundDca.Collect.csproj" />
+    <Project Path="src/FundDca.Import/FundDca.Import.csproj" />
+    <Project Path="src/FundDca.Core/FundDca.Core.csproj" />
+    <Project Path="src/FundDca.Data/FundDca.Data.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FundDca.Core.Tests/FundDca.Core.Tests.csproj" />
+  </Folder>
+</Solution>
