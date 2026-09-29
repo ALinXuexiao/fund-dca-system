@@ -643,7 +643,7 @@ watch(
     <!-- 今日定投建议：四条件同时满足才投固定额 -->
     <div class="panel" v-if="decision">
       <div class="panel-head panel-head-col">
-        <h3>今日定投建议（四条件同时满足才投固定额）</h3>
+        <h3>今日定投建议</h3>
         <div class="head-meta">
           <span>估值日期 {{ decision.valuationDate ?? '—' }}</span>
           <span class="meta-sep">·</span>
@@ -794,7 +794,7 @@ watch(
     <!-- 持仓明细（赛道第一列分组） -->
     <div class="panel">
       <div class="panel-head">
-        <h3>持仓明细（按赛道分组）</h3>
+        <h3>持仓明细</h3>
         <span style="font-size:12px;color:var(--muted)">份额 × 单位净值 = 市值 · 红涨绿跌</span>
       </div>
       <table>

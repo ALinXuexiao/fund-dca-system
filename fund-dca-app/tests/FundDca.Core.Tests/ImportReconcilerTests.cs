@@ -132,6 +132,64 @@ public class ImportReconcilerTests
     }
 
     [Fact]
+    public void 新基金带正收益率_按当前市值反推建议本金()
+    {
+        // 市值 1125、收益率 +12.5% → 本金 = 1125 / 1.125 = 1000
+        var items = ImportReconciler.Build(
+            [new ParsedPosition("999999", "某某行业股票A", 100m, 1125m, 12.5m)],
+            [], BondSector, MoneySector);
+        var one = Assert.Single(items);
+        Assert.Equal(ReconcileKind.NewFund, one.Kind);
+        Assert.Equal(12.5m, one.FileYield);
+        Assert.Equal(1000m, one.SuggestedCost);
+    }
+
+    [Fact]
+    public void 新基金带负收益率_反推本金高于市值()
+    {
+        // 市值 968、收益率 -3.2% → 本金 = 968 / 0.968 = 1000
+        var items = ImportReconciler.Build(
+            [new ParsedPosition("999999", "某某行业股票A", 100m, 968m, -3.2m)],
+            [], BondSector, MoneySector);
+        var one = Assert.Single(items);
+        Assert.Equal(1000m, one.SuggestedCost);
+    }
+
+    [Fact]
+    public void 新基金填收益率但缺市值_不反推本金_提示手工填写()
+    {
+        var items = ImportReconciler.Build(
+            [new ParsedPosition("999999", "某某行业股票A", 100m, null, 12.5m)],
+            [], BondSector, MoneySector);
+        var one = Assert.Single(items);
+        Assert.Equal(12.5m, one.FileYield);
+        Assert.Null(one.SuggestedCost);
+        Assert.Contains("手工填写初始本金", one.Message);
+    }
+
+    [Fact]
+    public void 货币新基金填收益率_忽略_不产生建议本金()
+    {
+        var items = ImportReconciler.Build(
+            [new ParsedPosition("018093", "某某现金添利货币", null, 5000m, 5m)],
+            [], BondSector, MoneySector);
+        var one = Assert.Single(items);
+        Assert.True(one.IsManual);
+        Assert.Null(one.SuggestedCost);
+    }
+
+    [Fact]
+    public void 百分数解析_兼容百分号_小数比例_纯数值与负数()
+    {
+        Assert.Equal(12.5m, StatementText.ParsePercent("12.5%"));
+        Assert.Equal(12.5m, StatementText.ParsePercent("0.125"));  // Excel 百分比单元格存储值
+        Assert.Equal(12.5m, StatementText.ParsePercent("12.5"));   // 直接按百分数填写
+        Assert.Equal(-3.2m, StatementText.ParsePercent("-3.2%"));
+        Assert.Equal(-3.2m, StatementText.ParsePercent("-0.032"));
+        Assert.Null(StatementText.ParsePercent(""));
+    }
+
+    [Fact]
     public void 名称推断类型_覆盖债券货币QDII与股票()
     {
         Assert.Equal(FundType.Bond, ImportReconciler.InferType("华夏短债债券A"));

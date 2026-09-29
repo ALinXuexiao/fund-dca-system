@@ -28,7 +28,11 @@ public record ReconcileItemDto(
     decimal? SuggestedAddedCost,
     FundType? ProposedType,
     IReadOnlyList<ReconcileAction> AllowedActions,
-    string Message);
+    string Message,
+    /// <summary>文件填写的持有收益率（%）；仅新基金行可能有值。</summary>
+    decimal? FileYield = null,
+    /// <summary>按文件收益率反推的新基金初始本金（用户可在提交前修改）。</summary>
+    decimal? SuggestedCost = null);
 
 public record ImportSummaryDto(
     int Total,

@@ -501,10 +501,17 @@ public class ImportService(
             var shares = item.FileShares ?? 0m;
             var holding = await GetOrCreateHoldingAsync(code, proofDate, now, ct);
             holding.Shares = shares;
-            holding.CostAmount = null; // 资产证明不含成本，收益指标后续由流水/手工补齐
+            // 初始本金：优先用户在对账页手工填写的金额，其次按文件收益率反推的建议本金；皆无则为 null（收益指标显示“—”）
+            var initialCost = decision?.AddedCost is { } dc && dc > 0m
+                ? dc
+                : item.SuggestedCost;
+            holding.CostAmount = initialCost;
             holding.UpdatedAt = now;
             var stable = type == FundType.Bond ? "稳健类（计入 D、不定投）" : "权益类（参与 B1-B4 判定）";
-            logs.Add($"{prefix}：{item.FileName}（{code}）{shares:0.##} 份，归为{stable}");
+            var costText = initialCost is { } ic
+                ? $"，初始本金 ¥{ic:0.00}（持有收益率承接导入前口径）"
+                : string.Empty;
+            logs.Add($"{prefix}：{item.FileName}（{code}）{shares:0.##} 份，归为{stable}{costText}");
         }
     }
 
@@ -635,5 +642,7 @@ public class ImportService(
         i.SuggestedAddedCost,
         i.ProposedType,
         i.AllowedActions,
-        i.Message);
+        i.Message,
+        i.FileYield,
+        i.SuggestedCost);
 }

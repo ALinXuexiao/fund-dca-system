@@ -50,7 +50,8 @@ public enum ReconcileAction
 }
 
 /// <summary>解析器产出的一行持仓（文件口径）。</summary>
-public record ParsedPosition(string? Code, string Name, decimal? Shares, decimal? MarketValue)
+/// <param name="Yield">文件填写的持有收益率（% 口径，如 12.5 表示 +12.5%）；仅新基金建档时用于反推初始本金。</param>
+public record ParsedPosition(string? Code, string Name, decimal? Shares, decimal? MarketValue, decimal? Yield = null)
 {
     public string? RawLine { get; init; }
 }
@@ -102,7 +103,11 @@ public record ReconcileItem(
     /// <summary>新基金建议类型（用户可在前端改判）。</summary>
     FundType? ProposedType,
     IReadOnlyList<ReconcileAction> AllowedActions,
-    string Message);
+    string Message,
+    /// <summary>文件填写的持有收益率（%）；仅新基金行可能有值。</summary>
+    decimal? FileYield = null,
+    /// <summary>按文件收益率与当前市值反推的新基金初始本金（用户可在提交前修改）；市值缺失或收益率异常时为 null。</summary>
+    decimal? SuggestedCost = null);
 
 /// <summary>
 /// 导入对账纯规则：文件持仓 × 系统持仓 → 逐项差异与默认处理动作。
@@ -158,10 +163,35 @@ public static class ImportReconciler
                     FundType.Bond => "新债券基金：归入稳健类，计入 D、不定投、正常采集净值",
                     _ => "新权益基金：请选择所属赛道后建仓，将参与 B1-B4 定投判定",
                 };
+
+                // 文件收益率仅用于净值型新基金反推初始本金；货币/理财无本金概念，直接忽略
+                decimal? suggestedCost = null;
+                if (!isManual && p.Yield is { } y)
+                {
+                    if (p.MarketValue is { } yieldMv && yieldMv > 0m)
+                    {
+                        var factor = 1m + y / 100m;
+                        if (factor > 0m)
+                        {
+                            suggestedCost = Math.Round(yieldMv / factor, 2);
+                            msg += $"；文件收益率 {y:0.##}%，按当前市值反推初始本金约 ¥{suggestedCost:0.00}（可修改）";
+                        }
+                        else
+                        {
+                            msg += "；文件收益率低于 -100% 不合常理，已忽略，请核对后重新填写";
+                        }
+                    }
+                    else
+                    {
+                        msg += "；已填收益率但缺少当前市值，无法自动反推本金，请在下方手工填写初始本金";
+                    }
+                }
+
                 items.Add(new ReconcileItem(
                     code, p.Name, p.Shares, p.MarketValue, false, null, null, sector, null, isManual,
                     null, null, null, null, ReconcileKind.NewFund, ReconcileAction.CreateFund,
-                    p.Shares ?? 0m, null, proposed, [ReconcileAction.CreateFund, ReconcileAction.KeepSystem], msg));
+                    p.Shares ?? 0m, null, proposed, [ReconcileAction.CreateFund, ReconcileAction.KeepSystem], msg,
+                    FileYield: p.Yield, SuggestedCost: suggestedCost));
                 continue;
             }
 

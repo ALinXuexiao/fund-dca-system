@@ -79,6 +79,51 @@ public static partial class StatementText
         return null;
     }
 
+    /// <summary>
+    /// 把单元格文本解析为百分数数值（输出口径为 %，如 12.5 表示 12.5%，亏损为负）：
+    /// 带百分号 "12.5%"→12.5；不带百分号时，绝对值 ≤ 1 视为 Excel 百分比单元格存储的小数比例（0.125→12.5），
+    /// 大于 1 视为已按百分数填写的数值（12.5→12.5）；无法解析返回 null。
+    /// </summary>
+    public static decimal? ParsePercent(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var s = text.Trim()
+            .Replace("，", "")
+            .Replace(",", "")
+            .Replace("．", ".")
+            .Replace("％", "%");
+
+        // 全角数字/负号 → 半角
+        var chars = s.Select(c =>
+        {
+            if (c >= 0xFF10 && c <= 0xFF19)
+            {
+                return (char)(c - 0xFEE0);
+            }
+            return c == '－' ? '-' : c;
+        }).ToArray();
+        s = new string(chars);
+
+        var m = Regex.Match(s, @"-?\d+(?:\.\d+)?");
+        if (!m.Success
+            || !decimal.TryParse(m.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var d))
+        {
+            return null;
+        }
+
+        if (s.Contains('%'))
+        {
+            return d;
+        }
+
+        // 无百分号：|x| ≤ 1 判定为小数比例（兼容百分比格式单元格），否则为百分数数值
+        return Math.Abs(d) <= 1m ? d * 100m : d;
+    }
+
     /// <summary>从一行中提取所有非负数（剔除日期与百分比），用于 PDF 启发式定位份额/市值。</summary>
     public static List<decimal> NumbersInLine(string line)
     {

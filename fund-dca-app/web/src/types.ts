@@ -285,6 +285,10 @@ export interface ReconcileItem {
   proposedType: FundType | null
   allowedActions: ReconcileAction[]
   message: string
+  /** 文件填写的持有收益率（%）；仅新基金行可能有值 */
+  fileYield: number | null
+  /** 按文件收益率反推的新基金初始本金（用户可在对账页修改） */
+  suggestedCost: number | null
 }
 
 export interface SectorOption {

@@ -42,6 +42,7 @@ interface Choice {
   sectorId: number | null
   fundType: FundType
   addedCost: number | null
+  initialCost: number | null
 }
 
 const choices = reactive<Record<string, Choice>>({})
@@ -105,6 +106,13 @@ function fmtShares(v: number | null | undefined): string {
   return v == null ? '—' : v.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) {
+    return '—'
+  }
+  return (v > 0 ? '+' : '') + v.toFixed(2) + '%'
+}
+
 function choiceOf(item: ReconcileItem): Choice | null {
   return item.code ? (choices[item.code] ?? null) : null
 }
@@ -126,6 +134,7 @@ function initChoices(p: ImportPreview) {
       sectorId: item.sectorId,
       fundType: item.proposedType ?? item.systemType ?? 'Stock',
       addedCost: item.suggestedAddedCost,
+      initialCost: item.suggestedCost,
     }
   }
 }
@@ -222,7 +231,12 @@ async function onCommit() {
           action: c.action,
           sectorId: c.action === 'CreateFund' ? c.sectorId : null,
           fundType: c.action === 'CreateFund' ? c.fundType : null,
-          addedCost: c.action === 'ManualAdd' ? c.addedCost : null,
+          addedCost:
+            c.action === 'ManualAdd'
+              ? c.addedCost
+              : c.action === 'CreateFund'
+                ? c.initialCost
+                : null,
         }
       })
 
@@ -299,7 +313,7 @@ async function onRollback(v: PositionVersion) {
           {{ busy ? '解析中…' : '使用演示文件体验' }}
         </button>
         <a class="tpl-link" :href="statementTemplateUrl" download="基金持仓证明导入模板.xlsx">
-          下载标准 Excel 模板（PDF 版式识别不了时用它粘贴两列即可）
+          下载标准 Excel 模板
         </a>
       </div>
 
@@ -362,6 +376,7 @@ async function onRollback(v: PositionVersion) {
                   <template v-if="item.fileShares != null">
                     <div>{{ fmtShares(item.fileShares) }} 份</div>
                     <div v-if="item.fileMarketValue != null" class="sub">¥{{ fmtMoney(item.fileMarketValue) }}</div>
+                    <div v-if="item.fileYield != null" class="sub">收益率 {{ fmtPct(item.fileYield) }}</div>
                   </template>
                   <template v-else-if="item.fileMarketValue != null">
                     <div>¥{{ fmtMoney(item.fileMarketValue) }}</div>
@@ -405,6 +420,20 @@ async function onRollback(v: PositionVersion) {
                       </select>
                       <span v-else class="sub">
                         {{ choiceOf(item)!.fundType === 'Money' ? '计入稳健 D，不定投' : '计入稳健 D，仅做仓位占比' }}
+                      </span>
+
+                      <label v-if="choiceOf(item)!.fundType !== 'Money'" class="cost-input">
+                        初始本金 ¥
+                        <input
+                          v-model.number="choiceOf(item)!.initialCost"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="选填，即导入前持仓成本"
+                        />
+                      </label>
+                      <span v-if="choiceOf(item)!.fundType !== 'Money'" class="sub">
+                        已填收益率时按市值自动反推，可修改；留空则收益指标暂显示“—”
                       </span>
                     </div>
 

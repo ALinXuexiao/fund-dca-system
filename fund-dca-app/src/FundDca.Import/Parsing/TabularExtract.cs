@@ -9,13 +9,17 @@ namespace FundDca.Import.Parsing;
 /// </summary>
 internal static class TabularExtract
 {
-    internal sealed record Row(string? Code, string Name, decimal? Shares, decimal? MarketValue);
+    internal sealed record Row(string? Code, string Name, decimal? Shares, decimal? MarketValue, decimal? Yield);
 
     private static readonly string[] CodeKeys = ["基金代码", "代码"];
     private static readonly string[] NameKeys = ["基金名称", "基金简称", "产品名称", "名称"];
     private static readonly string[] ShareKeys = ["持有份额", "可用份额", "总份额", "份额"];
     private static readonly string[] ValueKeys =
         ["参考市值", "持有市值", "资产小计", "最新市值", "市值", "持仓金额", "金额"];
+
+    // 仅认“率/幅”口径，避免把“持仓收益(元)”等金额列误当收益率
+    private static readonly string[] YieldKeys =
+        ["持有收益率", "累计收益率", "持仓收益率", "收益率", "涨跌幅"];
 
     private static readonly Regex DateRegex =
         new(@"(20\d{2})\s*[-年/.]\s*(\d{1,2})\s*[-月/.]\s*(\d{1,2})", RegexOptions.Compiled);
@@ -29,7 +33,7 @@ internal static class TabularExtract
 
         DateOnly? proofDate = null;
         var headerIdx = -1;
-        int codeCol = -1, nameCol = -1, shareCol = -1, valueCol = -1;
+        int codeCol = -1, nameCol = -1, shareCol = -1, valueCol = -1, yieldCol = -1;
 
         for (var i = 0; i < rows.Count; i++)
         {
@@ -48,6 +52,7 @@ internal static class TabularExtract
                 nameCol = nc;
                 shareCol = sc;
                 valueCol = vc;
+                yieldCol = FindColumn(r, YieldKeys); // 可选列，不参与表头成立判定
                 break;
             }
         }
@@ -79,14 +84,15 @@ internal static class TabularExtract
 
             var shares = shareCol >= 0 ? StatementText.ParseDecimal(Cell(r, shareCol)) : null;
             var marketValue = valueCol >= 0 ? StatementText.ParseDecimal(Cell(r, valueCol)) : null;
+            var yield = yieldCol >= 0 ? StatementText.ParsePercent(Cell(r, yieldCol)) : null;
 
-            // 代码、名称、份额、市值四者全无的行视为表尾
-            if (code is null && string.IsNullOrWhiteSpace(name) && shares is null && marketValue is null)
+            // 代码、名称、份额、市值、收益率五者全无的行视为表尾
+            if (code is null && string.IsNullOrWhiteSpace(name) && shares is null && marketValue is null && yield is null)
             {
                 continue;
             }
 
-            result.Add(new Row(code, name, shares, marketValue));
+            result.Add(new Row(code, name, shares, marketValue, yield));
         }
 
         return (proofDate, result);
@@ -97,7 +103,7 @@ internal static class TabularExtract
         DateOnly? proofDate, IEnumerable<Row> rows, IReadOnlyList<string> warnings)
     {
         var positions = rows
-            .Select(r => new ParsedPosition(r.Code, r.Name, r.Shares, r.MarketValue))
+            .Select(r => new ParsedPosition(r.Code, r.Name, r.Shares, r.MarketValue, r.Yield))
             .ToList();
         return new ParsedStatement(source, fileName, templateVersion, proofDate, positions, warnings);
     }
