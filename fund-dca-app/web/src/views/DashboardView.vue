@@ -109,18 +109,28 @@ async function load(silent = false) {
   }
 }
 
-async function onRefresh() {
+/**
+ * 采集最新净值。auto=true 为启动后自动触发：不单独重载看板、不弹成功提示
+ * （由 autoRefreshFirstOpen 统一收尾），返回 false 表示请求整体失败、下次进入可重试。
+ */
+async function onRefresh(auto = false): Promise<boolean> {
   refreshing.value = true
   try {
     const report = await refreshNavs()
-    await load(true)
+    if (!auto) {
+      await load(true)
+    }
     if (report.failedCount > 0) {
       failures.value = report.results.filter((r) => !r.success)
-    } else {
+    } else if (!auto) {
       showToast(`净值刷新成功：${report.successCount} 只基金已更新至最新交易日`)
     }
+    return true
   } catch (e) {
-    showToast((e as Error).message, true)
+    if (!auto) {
+      showToast((e as Error).message, true)
+    }
+    return false
   } finally {
     refreshing.value = false
   }
@@ -152,22 +162,65 @@ const decisionRows = computed(() =>
   (decision.value?.funds ?? []).filter((f) => f.signal !== 'Stable'),
 )
 
-async function onRefreshValuations() {
+/** 采集指数估值。auto 语义同 onRefresh。 */
+async function onRefreshValuations(auto = false): Promise<boolean> {
   valRefreshing.value = true
   try {
     const report = await refreshValuations()
-    await load(true)
+    if (!auto) {
+      await load(true)
+    }
     if (report.failedCount > 0) {
       valFailures.value = report.results
         .filter((r) => !r.success)
         .map((r) => ({ indexCode: r.indexCode, indexName: r.indexName, error: r.error }))
-    } else {
+    } else if (!auto) {
       showToast(`估值刷新成功：${report.successCount} 个指数已更新（${decision.value?.valuationDate ?? ''}）`)
     }
+    return true
   } catch (e) {
-    showToast((e as Error).message, true)
+    if (!auto) {
+      showToast((e as Error).message, true)
+    }
+    return false
   } finally {
     valRefreshing.value = false
+  }
+}
+
+// ---------- 启动后当天首次进入看板：自动采集净值 + 估值 ----------
+
+/** localStorage 标记键：记录最近一次自动刷新日期（本机时区 yyyy-MM-dd），当天只自动跑一次 */
+const AUTO_REFRESH_KEY = 'funddca:auto-refresh-date'
+
+function localDateString(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * 一键启动后首次打开看板时自动执行“刷新今日净值 + 刷新估值”，无需手点按钮：
+ * ① 当天只执行一次（localStorage 日期标记，切走再切回/刷新页面均不重复）；
+ * ② 两个采集互不相关，并行触发，按钮上的“正在采集…”状态照常可见；
+ * ③ 仅当两个请求都完成才记标记——启动时网络未就绪导致的整体失败，下次进入会自动重试；
+ * ④ 个别基金/指数失败仍走原有的失败弹窗，可在弹窗中查看并手动再刷。
+ */
+async function autoRefreshFirstOpen() {
+  const today = localDateString()
+  if (localStorage.getItem(AUTO_REFRESH_KEY) === today) {
+    return
+  }
+
+  const [navOk, valOk] = await Promise.all([onRefresh(true), onRefreshValuations(true)])
+  await load(true)
+
+  if (navOk && valOk) {
+    localStorage.setItem(AUTO_REFRESH_KEY, today)
+    if (!failures.value && !valFailures.value) {
+      showToast('启动后已自动刷新今日净值与指数估值')
+    }
+  } else {
+    showToast('启动自动刷新未全部成功，可点击右上方按钮手动重试', true)
   }
 }
 
@@ -504,6 +557,8 @@ function onResize() {
 onMounted(async () => {
   await load()
   window.addEventListener('resize', onResize)
+  // 先用库内数据把看板渲染出来，再在后台自动采集净值与估值（当天仅一次，不阻塞页面交互）
+  void autoRefreshFirstOpen()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
@@ -541,13 +596,13 @@ watch(
         净值日期：<b>{{ data.asOfDate ?? '—' }}</b>（盘后正式净值）
         <span v-if="data.containsSeedData" class="badge badge-seed">演示数据 · 未采集真实净值</span>
       </div>
-      <button class="btn ghost" :disabled="valRefreshing" @click="onRefreshValuations">
+      <button class="btn ghost" :disabled="valRefreshing" @click="onRefreshValuations()">
         <span v-if="valRefreshing" class="spinner"></span>{{ valRefreshing ? '正在采集指数估值…' : '刷新估值' }}
       </button>
       <button class="btn ghost" :class="{ on: intradayOn }" :disabled="intradayLoading" @click="toggleIntraday">
         {{ intradayOn ? (intradayLoading ? '盘中估算更新中…' : '盘中估算：开（60 秒自动）') : '盘中估算：关' }}
       </button>
-      <button class="btn" :disabled="refreshing" @click="onRefresh">
+      <button class="btn" :disabled="refreshing" @click="onRefresh()">
         <span v-if="refreshing" class="spinner"></span>{{ refreshing ? '正在采集天天基金净值…' : '刷新今日净值' }}
       </button>
     </div>
