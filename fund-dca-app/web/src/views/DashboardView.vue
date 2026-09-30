@@ -35,8 +35,8 @@ const decision = ref<Decision | null>(null)
 const refreshing = ref(false)
 const valRefreshing = ref(false)
 
-// 盘中估算（跟踪指数实时行情推算，不落库）：开关打开后每 60 秒自动刷新
-const intradayOn = ref(false)
+// 盘中估算（跟踪指数实时行情推算，不落库）：进入看板默认开启，每 60 秒自动刷新，可手动关闭
+const intradayOn = ref(true)
 const intraday = ref<Intraday | null>(null)
 const intradayLoading = ref(false)
 /** 前端轮询间隔；后端指数行情缓存 30 秒，故 60 秒足够 */
@@ -241,6 +241,13 @@ async function loadIntraday(silent = false) {
   }
 }
 
+/** 开启盘中估算：立即拉取一次并启动 60 秒轮询 */
+async function startIntraday() {
+  intradayOn.value = true
+  await loadIntraday()
+  intradayTimer = window.setInterval(() => void loadIntraday(true), INTRADAY_REFRESH_MS)
+}
+
 async function toggleIntraday() {
   if (intradayOn.value) {
     intradayOn.value = false
@@ -249,9 +256,7 @@ async function toggleIntraday() {
     intradayTimer = undefined
     return
   }
-  intradayOn.value = true
-  await loadIntraday()
-  intradayTimer = window.setInterval(() => void loadIntraday(true), INTRADAY_REFRESH_MS)
+  await startIntraday()
 }
 
 const intradayByCode = computed(() => {
@@ -565,6 +570,8 @@ function onResize() {
 onMounted(async () => {
   await load()
   window.addEventListener('resize', onResize)
+  // 盘中估算默认开启：立即取一次并每 60 秒轮询（后台进行，不阻塞页面）
+  void startIntraday()
   // 先用库内数据把看板渲染出来，再在后台自动采集净值与估值（当天仅一次，不阻塞页面交互）
   void autoRefreshFirstOpen()
 })
