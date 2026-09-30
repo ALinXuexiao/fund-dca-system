@@ -521,7 +521,15 @@ function renderBar() {
     yAxis: {
       type: 'category',
       inverse: true,
-      data: equityRows.map((r) => r.name.replace(/(ETF联接|指数|增强|A|\(LOF\)|\(QDII\))/g, '').slice(0, 12)),
+      // 压缩名称仅用于纵轴展示：先去括号注释与套话词，最后只删“末尾”的 A 类份额后缀；
+      // 切勿裸删字母 A——指数名里的 A50（如中证A50）会被误伤成 50
+      data: equityRows.map((r) =>
+        r.name
+          .replace(/\((?:LOF|QDII)\)/g, '')
+          .replace(/ETF联接|指数|增强/g, '')
+          .replace(/A$/, '')
+          .slice(0, 12),
+      ),
       axisLabel: { color: '#4b5563', fontSize: 11.5 },
       axisLine: { show: false },
       axisTick: { show: false },
