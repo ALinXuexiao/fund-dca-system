@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { defineAsyncComponent, onMounted, ref } from 'vue'
 import { fetchHealth } from './api'
-import DashboardView from './views/DashboardView.vue'
-import FundArchiveView from './views/FundArchiveView.vue'
-import ImportView from './views/ImportView.vue'
+
+// 三个页签按路由级别代码分割：首屏只加载持仓看板（含 echarts），
+// 导入对账/基金档案在首次点开时才下载对应 chunk
+const DashboardView = defineAsyncComponent(() => import('./views/DashboardView.vue'))
+const FundArchiveView = defineAsyncComponent(() => import('./views/FundArchiveView.vue'))
+const ImportView = defineAsyncComponent(() => import('./views/ImportView.vue'))
 
 const tab = ref<'dashboard' | 'archive' | 'import'>('dashboard')
 const backendOk = ref(false)

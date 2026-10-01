@@ -12,4 +12,24 @@ export default defineConfig({
       '/health': { target: 'http://localhost:5000' },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 第三方依赖独立分块并长期缓存：vue/echarts 不随业务代码改动而失效；
+        // echarts 体积大且仅看板使用，单独成块后与看板 chunk 并行下载
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return
+          }
+          if (id.includes('echarts') || id.includes('zrender')) {
+            return 'echarts'
+          }
+          if (id.includes('@vue') || id.includes('vue')) {
+            return 'vue'
+          }
+          return 'vendor'
+        },
+      },
+    },
+  },
 })

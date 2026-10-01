@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
+import { init as initChart, type ECharts } from '../lib/echarts'
 import {
   fetchDashboard,
   refreshNavs,
@@ -51,8 +51,8 @@ let toastTimer: number | undefined
 
 const donutEl = ref<HTMLDivElement>()
 const barEl = ref<HTMLDivElement>()
-let donutChart: echarts.ECharts | null = null
-let barChart: echarts.ECharts | null = null
+let donutChart: ECharts | null = null
+let barChart: ECharts | null = null
 
 // 货币基金手工市值内联编辑
 const editingCode = ref<string | null>(null)
@@ -313,13 +313,18 @@ function estTitle(row: DashboardRow): string {
 const proxyCount = computed(() => (intraday.value?.rows ?? []).filter((r) => r.viaProxy).length)
 
 function startBudgetEdit() {
-  if (!data.value?.budget) return
-  draftBudget.value = String(data.value.budget.budgetAmount)
-  draftInvested.value = String(data.value.budget.investedAmount)
+  // 当月尚无预算记录时也要能进入编辑：留空由用户填写，而不是直接返回
+  const b = data.value?.budget
+  draftBudget.value = b ? String(b.budgetAmount) : ''
+  draftInvested.value = b ? String(b.investedAmount) : '0'
   editingBudget.value = true
 }
 
 async function saveBudget() {
+  if (draftBudget.value.trim() === '') {
+    showToast('请填写当月预算额', true)
+    return
+  }
   const budget = Number(draftBudget.value)
   const invested = Number(draftInvested.value)
   if (!Number.isFinite(budget) || !Number.isFinite(invested) || budget < 0 || invested < 0 || invested > budget) {
@@ -484,7 +489,7 @@ function renderCharts() {
 
 function renderDonut() {
   if (!data.value || !donutEl.value) return
-  donutChart ??= echarts.init(donutEl.value)
+  donutChart ??= initChart(donutEl.value)
   donutChart.setOption({
     tooltip: {
       trigger: 'item',
@@ -513,7 +518,7 @@ function renderBar() {
   const equityRows = [...data.value.rows]
     .filter((r) => r.sectorIsEquity && !isStableType(r.type))
     .sort((a, b) => b.weightPercent - a.weightPercent)
-  barChart ??= echarts.init(barEl.value)
+  barChart ??= initChart(barEl.value)
   barChart.setOption({
     grid: { left: 150, right: 40, top: 24, bottom: 28 },
     tooltip: {
@@ -652,9 +657,14 @@ watch(
         <div class="label">银行卡待投预算</div>
         <template v-if="!editingBudget">
           <div class="value" style="color:var(--down)">¥{{ fmtMoney(data.budget?.remainingAmount) }}</div>
-          <div class="sub2" v-if="data.budget">
-            {{ data.budget.yearMonth }} 预算 ¥{{ fmtMoney(data.budget.budgetAmount) }}，已投 ¥{{ fmtMoney(data.budget.investedAmount) }}
-            <button class="btn sm ghost" style="margin-left:6px" @click="startBudgetEdit">修改</button>
+          <div class="sub2">
+            <template v-if="data.budget">
+              {{ data.budget.yearMonth }} 预算 ¥{{ fmtMoney(data.budget.budgetAmount) }}，已投 ¥{{ fmtMoney(data.budget.investedAmount) }}
+            </template>
+            <template v-else>本月尚未设置预算</template>
+            <button class="btn sm ghost" style="margin-left:6px" @click="startBudgetEdit">
+              {{ data.budget ? '修改' : '设置' }}
+            </button>
           </div>
         </template>
         <template v-else>

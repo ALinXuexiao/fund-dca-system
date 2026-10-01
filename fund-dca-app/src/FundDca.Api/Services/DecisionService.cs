@@ -38,9 +38,8 @@ public class DecisionService(FundDcaDbContext db)
             .ToDictionary(h => h.FundCode);
         var manual = (await db.ManualValues.AsNoTracking().ToListAsync(ct))
             .ToDictionary(m => m.FundCode);
-        var latestNavs = (await db.FundNavs.AsNoTracking().ToListAsync(ct))
-            .GroupBy(n => n.FundCode)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(n => n.TradeDate).First());
+        var latestNavs = (await db.LatestNavsAsync(ct))
+            .ToDictionary(n => n.FundCode);
 
         // 每只基金当前市值（与看板同一口径）
         decimal MarketValue(Fund f)
@@ -65,10 +64,9 @@ public class DecisionService(FundDcaDbContext db)
             .GroupBy(f => f.Sector!.Name)
             .ToDictionary(g => g.Key, g => g.Sum(f => mvByCode[f.Code]));
 
-        // 最新估值（每指数取最新一条）
-        var latestVal = (await db.IndexValuations.AsNoTracking().ToListAsync(ct))
-            .GroupBy(v => v.IndexCode)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(v => v.TradeDate).First());
+        // 最新估值（每指数一条，DISTINCT ON 取回）
+        var latestVal = (await db.LatestValuationsAsync(ct))
+            .ToDictionary(v => v.IndexCode);
 
         // B5 去重：非主基金 → 同组主基金代码
         var groups = await db.OverlapGroups.AsNoTracking()
@@ -87,9 +85,8 @@ public class DecisionService(FundDcaDbContext db)
             }
         }
 
-        var yearMonth = DateTime.Now.ToString("yyyy-MM");
-        var budget = await db.BudgetMonths.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.YearMonth == yearMonth, ct);
+        // 当月预算：跨月后当月无记录时自动沿用上月预算额建档（详见 BudgetMonthQueries）
+        var budget = await db.CurrentMonthAsync(ct);
         var remaining = budget is null ? 0m : Math.Max(0m, budget.BudgetAmount - budget.InvestedAmount);
 
         var inputs = new List<DecisionInput>();
@@ -127,10 +124,11 @@ public class DecisionService(FundDcaDbContext db)
             .Select(v => (DateOnly?)v.TradeDate)
             .DefaultIfEmpty(null).Max()?.ToString("yyyy-MM-dd");
 
+        var fundsByCode = funds.ToDictionary(f => f.Code);
         var dtos = new List<FundDecisionDto>();
         foreach (var d in decisions)
         {
-            var f = funds.First(x => x.Code == d.FundCode);
+            var f = fundsByCode[d.FundCode];
             var idx = f.TrackedIndex;
             IndexValuation? val = null;
             if (idx is not null)

@@ -35,16 +35,20 @@ public sealed class IntradayService(
             .Where(f => f.IsActive && !f.UseManualValue && f.Type != FundType.Money && f.TrackedIndexCode != null)
             .ToListAsync(ct);
 
+        // 指数档案需要连同代理指数一起解析，表本身极小（十几个指数），整表取回
         var indexes = (await db.Indexes.AsNoTracking().ToListAsync(ct))
             .ToDictionary(i => i.Code, StringComparer.OrdinalIgnoreCase);
 
-        var holdings = (await db.Holdings.AsNoTracking().ToListAsync(ct))
+        var fundCodes = funds.Select(f => f.Code).ToHashSet();
+        var holdings = (await db.Holdings.AsNoTracking()
+                .Where(h => fundCodes.Contains(h.FundCode))
+                .ToListAsync(ct))
             .ToDictionary(h => h.FundCode);
 
-        // 每只基金取最新一条净值（开发期数据量小，内存分组）
-        var latestNavs = (await db.FundNavs.AsNoTracking().ToListAsync(ct))
-            .GroupBy(n => n.FundCode)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(n => n.TradeDate).First());
+        // 每只基金取最新一条净值（DISTINCT ON）；本接口每 60 秒轮询一次，
+        // 不能把不断增长的净值全表历史反复跨网传输
+        var latestNavs = (await db.LatestNavsAsync(ct))
+            .ToDictionary(n => n.FundCode);
 
         // 解析每只基金的候选指数：自有指数 + 档案代理指数。
         // 代理指数一并取数，是因为「自有指数是否有行情」必须等接口返回才知道

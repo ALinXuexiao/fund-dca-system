@@ -101,12 +101,14 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
         holding.CostAmount = TradeMath.AddCost(holding.CostAmount ?? 0m, amount);
         holding.UpdatedAt = now;
 
-        // 当月预算"已投"累加
-        var yearMonth = DateTime.Now.ToString("yyyy-MM");
-        var budget = await db.BudgetMonths.FirstOrDefaultAsync(b => b.YearMonth == yearMonth, ct);
+        // 当月预算"已投"累加。
+        // 当月尚无记录时沿用上月预算额建档——不能像原先那样直接按 0 建档，
+        // 否则当月首笔买入会把 0 固化，并被后续月份逐月继承下去。
+        var budget = await db.CurrentMonthAsync(ct);
         if (budget is null)
         {
-            budget = new BudgetMonth { YearMonth = yearMonth, BudgetAmount = 0m };
+            // 全新库从未设置过预算：维持 0，由页面引导用户首次录入
+            budget = new BudgetMonth { YearMonth = DateTime.Now.ToString("yyyy-MM") };
             db.BudgetMonths.Add(budget);
         }
         budget.InvestedAmount = Math.Round(budget.InvestedAmount + amount, 4);

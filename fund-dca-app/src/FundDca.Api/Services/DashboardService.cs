@@ -26,17 +26,20 @@ public class DashboardService(FundDcaDbContext db)
         var manualValues = (await db.ManualValues.AsNoTracking().ToListAsync(ct))
             .ToDictionary(m => m.FundCode);
 
-        // 每只基金取最新一条净值（开发期数据量小，内存分组；后期改为窗口函数 SQL）
-        var latestNavs = (await db.FundNavs.AsNoTracking().ToListAsync(ct))
-            .GroupBy(n => n.FundCode)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(n => n.TradeDate).First());
+        // 每只基金取最新一条净值：DISTINCT ON 一次取回，避免整表历史跨网传输
+        var latestNavs = (await db.LatestNavsAsync(ct))
+            .ToDictionary(n => n.FundCode);
 
-        var yearMonth = DateTime.Now.ToString("yyyy-MM");
-        var budget = await db.BudgetMonths.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.YearMonth == yearMonth, ct);
+        // 当月预算：跨月后当月无记录时自动沿用上月预算额建档（详见 BudgetMonthQueries）
+        var budget = await db.CurrentMonthAsync(ct);
 
+        // 主净值日期只统计净值型基金（货币/手工市值无净值日期）
+        var navBasedCodes = funds
+            .Where(f => f.Type != FundType.Money && !f.UseManualValue)
+            .Select(f => f.Code)
+            .ToHashSet();
         var asOfDate = latestNavs.Values
-            .Where(n => funds.Any(f => f.Code == n.FundCode && f.Type != FundType.Money && !f.UseManualValue))
+            .Where(n => navBasedCodes.Contains(n.FundCode))
             .Select(n => (DateOnly?)n.TradeDate)
             .DefaultIfEmpty(null)
             .Max();

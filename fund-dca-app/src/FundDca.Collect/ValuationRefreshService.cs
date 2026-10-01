@@ -68,6 +68,11 @@ public sealed class ValuationRefreshService(
         var now = DateTimeOffset.UtcNow;
         var results = new List<ValuationRefreshResult>();
 
+        // 每指数最新估值一次性预载（跟踪实体）：循环内只做内存判定与 upsert，最后一次提交，
+        // 与指数数量无关地把写路径收敛为 1 次云端往返
+        var valByCode = (await db.LatestValuationsTrackedAsync(ct))
+            .ToDictionary(v => v.IndexCode);
+
         foreach (var idx in indexes)
         {
             if (idx.Metric == ValuationMetric.None)
@@ -77,10 +82,7 @@ public sealed class ValuationRefreshService(
             }
 
             // 手工维护估值的指数（蛋卷未覆盖，如恒生消费）：保留手工值，不采集、不计失败
-            var latestManual = await db.IndexValuations.AsNoTracking()
-                .Where(v => v.IndexCode == idx.Code)
-                .OrderByDescending(v => v.TradeDate)
-                .FirstOrDefaultAsync(ct);
+            valByCode.TryGetValue(idx.Code, out var latestManual);
             if (latestManual?.Source == "MANUAL")
             {
                 continue;
@@ -122,22 +124,8 @@ public sealed class ValuationRefreshService(
                         var pePercentile = Math.Round(
                             100m * series.Count(p => p.Pe <= latest.Pe) / series.Count, 2);
 
-                        var existingCsi = await db.IndexValuations
-                            .FirstOrDefaultAsync(v => v.IndexCode == idx.Code && v.TradeDate == latest.TradeDate, ct);
-
-                        if (existingCsi is null)
-                        {
-                            db.IndexValuations.Add(new IndexValuation
-                            {
-                                IndexCode = idx.Code,
-                                TradeDate = latest.TradeDate,
-                                PeTtm = latest.Pe,
-                                PePercentile = pePercentile,
-                                Source = "CSI",
-                                FetchedAt = now,
-                            });
-                        }
-                        else
+                        if (valByCode.TryGetValue(idx.Code, out var existingCsi)
+                            && existingCsi.TradeDate == latest.TradeDate)
                         {
                             existingCsi.PeTtm = latest.Pe;
                             existingCsi.PePercentile = pePercentile;
@@ -147,8 +135,21 @@ public sealed class ValuationRefreshService(
                             existingCsi.Source = "CSI";
                             existingCsi.FetchedAt = now;
                         }
+                        else
+                        {
+                            var created = new IndexValuation
+                            {
+                                IndexCode = idx.Code,
+                                TradeDate = latest.TradeDate,
+                                PeTtm = latest.Pe,
+                                PePercentile = pePercentile,
+                                Source = "CSI",
+                                FetchedAt = now,
+                            };
+                            db.IndexValuations.Add(created);
+                            valByCode[idx.Code] = created;
+                        }
 
-                        await db.SaveChangesAsync(ct);
                         results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
                             latest.TradeDate.ToString("yyyy-MM-dd"), false, null, pePercentile, null, null));
                         continue;
@@ -160,12 +161,19 @@ public sealed class ValuationRefreshService(
                 continue;
             }
 
-            var existing = await db.IndexValuations
-                .FirstOrDefaultAsync(v => v.IndexCode == idx.Code && v.TradeDate == q.TradeDate, ct);
-
-            if (existing is null)
+            if (valByCode.TryGetValue(idx.Code, out var existing) && existing.TradeDate == q.TradeDate)
             {
-                db.IndexValuations.Add(new IndexValuation
+                existing.PeTtm = q.PeTtm;
+                existing.PePercentile = q.PePercentile;
+                existing.Pb = q.Pb;
+                existing.PbPercentile = q.PbPercentile;
+                existing.ResolvedCode = viaProxy ? resolvedCode : null;
+                existing.Source = "DANJUAN";
+                existing.FetchedAt = now;
+            }
+            else
+            {
+                var created = new IndexValuation
                 {
                     IndexCode = idx.Code,
                     TradeDate = q.TradeDate,
@@ -176,23 +184,17 @@ public sealed class ValuationRefreshService(
                     ResolvedCode = viaProxy ? resolvedCode : null,
                     Source = "DANJUAN",
                     FetchedAt = now,
-                });
-            }
-            else
-            {
-                existing.PeTtm = q.PeTtm;
-                existing.PePercentile = q.PePercentile;
-                existing.Pb = q.Pb;
-                existing.PbPercentile = q.PbPercentile;
-                existing.ResolvedCode = viaProxy ? resolvedCode : null;
-                existing.Source = "DANJUAN";
-                existing.FetchedAt = now;
+                };
+                db.IndexValuations.Add(created);
+                valByCode[idx.Code] = created;
             }
 
-            await db.SaveChangesAsync(ct);
             results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true, q.TradeDate.ToString("yyyy-MM-dd"),
                 viaProxy, viaProxy ? resolvedCode : null, q.PePercentile, q.PbPercentile, null));
         }
+
+        // 全部估值 upsert 一次提交（N 次写往返 → 1 次）
+        await db.SaveChangesAsync(ct);
 
         var report = new ValuationRefreshReport(results, now);
         logger.LogInformation("估值采集完成：成功 {Ok}，失败 {Fail}（代理 {Proxy}）",

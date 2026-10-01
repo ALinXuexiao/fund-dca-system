@@ -3,9 +3,18 @@ using FundDca.Api.Services;
 using FundDca.Collect;
 using FundDca.Data;
 using FundDca.Import.Parsing;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// JSON 响应压缩（看板/决策/盘中估算接口每次加载与 60 秒轮询都返回全量 DTO；
+// 主库在云端、将来前端静态托管后浏览器到后端也是公网链路，gzip/br 可把 KB 级 JSON 压到 1/5 以下）
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.MimeTypes = ["application/json", "text/plain", "text/css", "application/javascript"];
+});
 
 // 控制器；枚举以字符串输出，前端无需维护魔法数字
 builder.Services.AddControllers()
@@ -83,6 +92,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseResponseCompression();
 app.UseCors();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTimeOffset.Now }));

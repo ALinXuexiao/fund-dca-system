@@ -155,28 +155,50 @@ public sealed class LocalMirrorSynchronizer
             await probe.OpenAsync(ct);
         }
 
-        await using var primary = CreateContext(_primaryConnString);
         await using var mirror = CreateContext(_mirrorConnString);
 
         // 2) 镜像结构对齐（幂等：与主库同一套 EF 迁移）
         await mirror.Database.MigrateAsync(ct);
 
-        // 3) 主库读取全部业务表
-        var sectors = await primary.Sectors.AsNoTracking().ToListAsync(ct);
-        var indexes = await primary.Indexes.AsNoTracking().ToListAsync(ct);
-        var funds = await primary.Funds.AsNoTracking().ToListAsync(ct);
-        var overlapGroups = await primary.OverlapGroups.AsNoTracking().ToListAsync(ct);
-        var fundOverlaps = await primary.FundOverlaps.AsNoTracking().ToListAsync(ct);
-        var holdings = await primary.Holdings.AsNoTracking().ToListAsync(ct);
-        var manualValues = await primary.ManualValues.AsNoTracking().ToListAsync(ct);
-        var fundNavs = await primary.FundNavs.AsNoTracking().ToListAsync(ct);
-        var dailySnapshots = await primary.DailySnapshots.AsNoTracking().ToListAsync(ct);
-        var budgetMonths = await primary.BudgetMonths.AsNoTracking().ToListAsync(ct);
-        var indexValuations = await primary.IndexValuations.AsNoTracking().ToListAsync(ct);
-        var dcaSettings = await primary.DcaSettings.AsNoTracking().ToListAsync(ct);
-        var trades = await primary.Trades.AsNoTracking().ToListAsync(ct);
-        var positionVersions = await primary.PositionVersions.AsNoTracking().ToListAsync(ct);
-        var positionVersionItems = await primary.PositionVersionItems.AsNoTracking().ToListAsync(ct);
+        // 3) 主库读取全部业务表。
+        // 主库在 Neon 云端，15 张表顺序读 = 15 个跨网 RTT（启动时同步等待，明显拖慢就绪时间）；
+        // EF 上下文不允许并发查询，故每张表用独立短上下文并发读取（连接仍走同一连接串的连接池），
+        // 墙钟时间从 ΣRTT 降为 max(RTT)。多占的连接/内存对个人单机场景可忽略。
+        var sectorsTask = LoadAsync(c => c.Sectors, ct);
+        var indexesTask = LoadAsync(c => c.Indexes, ct);
+        var fundsTask = LoadAsync(c => c.Funds, ct);
+        var overlapGroupsTask = LoadAsync(c => c.OverlapGroups, ct);
+        var fundOverlapsTask = LoadAsync(c => c.FundOverlaps, ct);
+        var holdingsTask = LoadAsync(c => c.Holdings, ct);
+        var manualValuesTask = LoadAsync(c => c.ManualValues, ct);
+        var fundNavsTask = LoadAsync(c => c.FundNavs, ct);
+        var dailySnapshotsTask = LoadAsync(c => c.DailySnapshots, ct);
+        var budgetMonthsTask = LoadAsync(c => c.BudgetMonths, ct);
+        var indexValuationsTask = LoadAsync(c => c.IndexValuations, ct);
+        var dcaSettingsTask = LoadAsync(c => c.DcaSettings, ct);
+        var tradesTask = LoadAsync(c => c.Trades, ct);
+        var positionVersionsTask = LoadAsync(c => c.PositionVersions, ct);
+        var positionVersionItemsTask = LoadAsync(c => c.PositionVersionItems, ct);
+        await Task.WhenAll(
+            sectorsTask, indexesTask, fundsTask, overlapGroupsTask, fundOverlapsTask,
+            holdingsTask, manualValuesTask, fundNavsTask, dailySnapshotsTask, budgetMonthsTask,
+            indexValuationsTask, dcaSettingsTask, tradesTask, positionVersionsTask, positionVersionItemsTask);
+
+        var sectors = sectorsTask.Result;
+        var indexes = indexesTask.Result;
+        var funds = fundsTask.Result;
+        var overlapGroups = overlapGroupsTask.Result;
+        var fundOverlaps = fundOverlapsTask.Result;
+        var holdings = holdingsTask.Result;
+        var manualValues = manualValuesTask.Result;
+        var fundNavs = fundNavsTask.Result;
+        var dailySnapshots = dailySnapshotsTask.Result;
+        var budgetMonths = budgetMonthsTask.Result;
+        var indexValuations = indexValuationsTask.Result;
+        var dcaSettings = dcaSettingsTask.Result;
+        var trades = tradesTask.Result;
+        var positionVersions = positionVersionsTask.Result;
+        var positionVersionItems = positionVersionItemsTask.Result;
 
         // 4) 事务内整表替换（CASCADE 清空顺序无关；回放按外键依赖顺序）
         await using var tx = await mirror.Database.BeginTransactionAsync(ct);
@@ -205,20 +227,17 @@ public sealed class LocalMirrorSynchronizer
         mirror.PositionVersionItems.AddRange(positionVersionItems);
         await mirror.SaveChangesAsync(ct);
 
-        // 5) 对齐自增序列，保证镜像库可独立使用（psql 手工插入不冲突）
-        // 表名/列名均为编译期常量，无注入风险（EF1003 属误报，局部抑制）
-#pragma warning disable EF1003
-        foreach (var (table, column) in new[]
-                 {
-                     ("sectors", "id"), ("overlap_groups", "id"), ("dca_settings", "id"),
-                     ("trades", "id"), ("position_versions", "id"), ("position_version_items", "id"),
-                 })
-        {
-            await mirror.Database.ExecuteSqlRawAsync(
-                $"SELECT setval(pg_get_serial_sequence('{table}', '{column}'), " +
-                $"COALESCE((SELECT MAX({column}) FROM {table}), 0) + 1, false)", ct);
-        }
-#pragma warning restore EF1003
+        // 5) 对齐自增序列，保证镜像库可独立使用（psql 手工插入不冲突）。
+        // 6 条 setval 拼成一条多语句 SQL，Npgsql 单次往返执行（表名/列名为编译期常量，无注入风险）
+        var setvalSql = string.Join(';', new[]
+            {
+                ("sectors", "id"), ("overlap_groups", "id"), ("dca_settings", "id"),
+                ("trades", "id"), ("position_versions", "id"), ("position_version_items", "id"),
+            }
+            .Select(t =>
+                $"SELECT setval(pg_get_serial_sequence('{t.Item1}', '{t.Item2}'), " +
+                $"COALESCE((SELECT MAX({t.Item2}) FROM {t.Item1}), 0) + 1, false)"));
+        await mirror.Database.ExecuteSqlRawAsync(setvalSql, ct);
 
         await tx.CommitAsync(ct);
 
@@ -231,6 +250,17 @@ public sealed class LocalMirrorSynchronizer
         new(new DbContextOptionsBuilder<FundDcaDbContext>()
             .UseNpgsql(connString)
             .Options);
+
+    /// <summary>
+    /// 在独立短上下文里读取整张表（供并发拉取不同表使用——同一 DbContext 不能并发执行查询）。
+    /// </summary>
+    private async Task<List<TEntity>> LoadAsync<TEntity>(
+        Func<FundDcaDbContext, DbSet<TEntity>> selector, CancellationToken ct)
+        where TEntity : class
+    {
+        await using var ctx = CreateContext(_primaryConnString);
+        return await selector(ctx).AsNoTracking().ToListAsync(ct);
+    }
 
     /// <summary>连接指纹（主机:端口:库:用户）：主库与镜像相同时自动禁用镜像。</summary>
     private static string Fingerprint(string connString)
