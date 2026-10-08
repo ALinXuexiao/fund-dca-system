@@ -458,7 +458,7 @@ function weightClass(r: DashboardRow): string {
 function manualStale(row: DashboardRow): boolean {
   if (!row.manualValueDate) return false
   const days = (Date.now() - new Date(row.manualValueDate).getTime()) / 86400000
-  return days > 7
+  return days > 30
 }
 
 function renderCharts() {
@@ -937,7 +937,7 @@ watch(
               <template v-else>
                 {{ fmtMoney(r.marketValue) }}
                 <div v-if="r.isMoney && manualStale(r)" style="color:var(--warn);font-size:11px;margin-top:2px">
-                  已超过 7 天未更新（{{ r.manualValueDate }}）
+                  已超过 30 天未更新（{{ r.manualValueDate }}）
                 </div>
               </template>
             </td>

@@ -40,7 +40,7 @@ public class FundsController(FundDcaDbContext db) : ControllerBase
 
     /// <summary>
     /// 货币基金手工维护当前市值（不采集净值、不模拟收益）。
-    /// 同时更新"最后更新日期"，超过 7 天前端给出提示。
+    /// 同时更新"最后更新日期"，超过 30 天前端给出提示。
     /// </summary>
     [HttpPut("{code}/manual-value")]
     public async Task<IActionResult> UpdateManualValue(
