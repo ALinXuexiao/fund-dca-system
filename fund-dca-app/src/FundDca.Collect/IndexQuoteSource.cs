@@ -87,6 +87,15 @@ public sealed class EastMoneyIndexQuoteSource(HttpClient http)
                 ? DateTimeOffset.FromUnixTimeSeconds(secs)
                 : DateTimeOffset.UtcNow;
 
+            // 合理性守卫：f3 是"百分数 × 100"（32 表示 0.32%）。指数为一篮子证券，
+            // A 股/港股在跟指数单日涨跌幅不可能超过 ±15%；东财在集合竞价/开盘初偶发
+            // 下发脏值（如 2026-10-08 开盘初 931069 一度返回 36%），超限一律不采信，
+            // 按"行情未取到"处理，避免估算净值与当日盈亏被放大百倍。30 秒后下轮自动恢复。
+            if (Math.Abs(pct.Value) > 1500m)
+            {
+                continue;
+            }
+
             result[secId] = new IndexQuote(code, name, pct.Value / 100m, quotedAt);
         }
 

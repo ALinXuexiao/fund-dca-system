@@ -89,108 +89,117 @@ public sealed class ValuationRefreshService(
             }
 
             var ownCode = DanJuanValuationSource.ToExternalCode(idx.Code);
-            var viaProxy = false;
-            var resolvedCode = ownCode;
 
-            if (!quotes.ContainsKey(ownCode))
+            // 蛋卷估值记账（自有命中 viaProxy=false；代理兜底 viaProxy=true）
+            void ApplyDanJuan(ValuationQuote q, bool viaProxy, string? resolvedExt)
             {
-                if (!string.IsNullOrEmpty(idx.ProxyCode))
+                if (valByCode.TryGetValue(idx.Code, out var existing) && existing.TradeDate == q.TradeDate)
                 {
-                    resolvedCode = DanJuanValuationSource.ToExternalCode(idx.ProxyCode);
-                    viaProxy = true;
+                    existing.PeTtm = q.PeTtm;
+                    existing.PePercentile = q.PePercentile;
+                    existing.Pb = q.Pb;
+                    existing.PbPercentile = q.PbPercentile;
+                    existing.ResolvedCode = viaProxy ? resolvedExt : null;
+                    existing.Source = "DANJUAN";
+                    existing.FetchedAt = now;
+                }
+                else
+                {
+                    var created = new IndexValuation
+                    {
+                        IndexCode = idx.Code,
+                        TradeDate = q.TradeDate,
+                        PeTtm = q.PeTtm,
+                        PePercentile = q.PePercentile,
+                        Pb = q.Pb,
+                        PbPercentile = q.PbPercentile,
+                        ResolvedCode = viaProxy ? resolvedExt : null,
+                        Source = "DANJUAN",
+                        FetchedAt = now,
+                    };
+                    db.IndexValuations.Add(created);
+                    valByCode[idx.Code] = created;
                 }
             }
 
-            if (!quotes.TryGetValue(resolvedCode, out var q))
+            // ① 首选：蛋卷对该指数"自身"的估值
+            if (quotes.TryGetValue(ownCode, out var own))
             {
-                // 蛋卷（含代理）未覆盖：PE 口径取中证官网该指数自有 PE 历史，按配置窗口现算百分位。
-                // 不用"代理估值"记账——这是本指数自己的估值水平。
-                if (idx.Metric == ValuationMetric.PeTtm)
-                {
-                    IReadOnlyList<CsiPePoint> series;
-                    try
-                    {
-                        series = await csiSource.FetchPeHistoryAsync(idx.Code, idx.WindowYears, ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "中证官网 PE 拉取失败：{Code}", idx.Code);
-                        series = [];
-                    }
-
-                    if (series.Count > 0)
-                    {
-                        var latest = series[^1];
-                        var pePercentile = Math.Round(
-                            100m * series.Count(p => p.Pe <= latest.Pe) / series.Count, 2);
-
-                        if (valByCode.TryGetValue(idx.Code, out var existingCsi)
-                            && existingCsi.TradeDate == latest.TradeDate)
-                        {
-                            existingCsi.PeTtm = latest.Pe;
-                            existingCsi.PePercentile = pePercentile;
-                            existingCsi.Pb = null;
-                            existingCsi.PbPercentile = null;
-                            existingCsi.ResolvedCode = null;
-                            existingCsi.Source = "CSI";
-                            existingCsi.FetchedAt = now;
-                        }
-                        else
-                        {
-                            var created = new IndexValuation
-                            {
-                                IndexCode = idx.Code,
-                                TradeDate = latest.TradeDate,
-                                PeTtm = latest.Pe,
-                                PePercentile = pePercentile,
-                                Source = "CSI",
-                                FetchedAt = now,
-                            };
-                            db.IndexValuations.Add(created);
-                            valByCode[idx.Code] = created;
-                        }
-
-                        results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
-                            latest.TradeDate.ToString("yyyy-MM-dd"), false, null, pePercentile, null, null));
-                        continue;
-                    }
-                }
-
-                results.Add(new ValuationRefreshResult(idx.Code, idx.Name, false, null, viaProxy, resolvedCode,
-                    null, null, "数据源未覆盖该指数（可在档案中配置代理指数）"));
+                ApplyDanJuan(own, false, null);
+                results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
+                    own.TradeDate.ToString("yyyy-MM-dd"), false, null, own.PePercentile, own.PbPercentile, null));
                 continue;
             }
 
-            if (valByCode.TryGetValue(idx.Code, out var existing) && existing.TradeDate == q.TradeDate)
+            // ② 蛋卷未覆盖：PE 口径取中证官网该指数自有 PE 历史，按配置窗口现算百分位。
+            //    不用"代理估值"记账——这是本指数自己的估值水平。
+            if (idx.Metric == ValuationMetric.PeTtm)
             {
-                existing.PeTtm = q.PeTtm;
-                existing.PePercentile = q.PePercentile;
-                existing.Pb = q.Pb;
-                existing.PbPercentile = q.PbPercentile;
-                existing.ResolvedCode = viaProxy ? resolvedCode : null;
-                existing.Source = "DANJUAN";
-                existing.FetchedAt = now;
-            }
-            else
-            {
-                var created = new IndexValuation
+                IReadOnlyList<CsiPePoint> series;
+                try
                 {
-                    IndexCode = idx.Code,
-                    TradeDate = q.TradeDate,
-                    PeTtm = q.PeTtm,
-                    PePercentile = q.PePercentile,
-                    Pb = q.Pb,
-                    PbPercentile = q.PbPercentile,
-                    ResolvedCode = viaProxy ? resolvedCode : null,
-                    Source = "DANJUAN",
-                    FetchedAt = now,
-                };
-                db.IndexValuations.Add(created);
-                valByCode[idx.Code] = created;
+                    series = await csiSource.FetchPeHistoryAsync(idx.Code, idx.WindowYears, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "中证官网 PE 拉取失败：{Code}", idx.Code);
+                    series = [];
+                }
+
+                if (series.Count > 0)
+                {
+                    var latest = series[^1];
+                    var pePercentile = Math.Round(
+                        100m * series.Count(p => p.Pe <= latest.Pe) / series.Count, 2);
+
+                    if (valByCode.TryGetValue(idx.Code, out var existingCsi)
+                        && existingCsi.TradeDate == latest.TradeDate)
+                    {
+                        existingCsi.PeTtm = latest.Pe;
+                        existingCsi.PePercentile = pePercentile;
+                        existingCsi.Pb = null;
+                        existingCsi.PbPercentile = null;
+                        existingCsi.ResolvedCode = null;
+                        existingCsi.Source = "CSI";
+                        existingCsi.FetchedAt = now;
+                    }
+                    else
+                    {
+                        var created = new IndexValuation
+                        {
+                            IndexCode = idx.Code,
+                            TradeDate = latest.TradeDate,
+                            PeTtm = latest.Pe,
+                            PePercentile = pePercentile,
+                            Source = "CSI",
+                            FetchedAt = now,
+                        };
+                        db.IndexValuations.Add(created);
+                        valByCode[idx.Code] = created;
+                    }
+
+                    results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
+                        latest.TradeDate.ToString("yyyy-MM-dd"), false, null, pePercentile, null, null));
+                    continue;
+                }
             }
 
-            results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true, q.TradeDate.ToString("yyyy-MM-dd"),
-                viaProxy, viaProxy ? resolvedCode : null, q.PePercentile, q.PbPercentile, null));
+            // ③ 蛋卷与中证官网都没有：最后才回落代理指数（如实标注 viaProxy，前端橙色提示）
+            if (!string.IsNullOrEmpty(idx.ProxyCode))
+            {
+                var proxyCode = DanJuanValuationSource.ToExternalCode(idx.ProxyCode);
+                if (quotes.TryGetValue(proxyCode, out var proxy))
+                {
+                    ApplyDanJuan(proxy, true, proxyCode);
+                    results.Add(new ValuationRefreshResult(idx.Code, idx.Name, true,
+                        proxy.TradeDate.ToString("yyyy-MM-dd"), true, proxyCode,
+                        proxy.PePercentile, proxy.PbPercentile, null));
+                    continue;
+                }
+            }
+
+            results.Add(new ValuationRefreshResult(idx.Code, idx.Name, false, null, false, null,
+                null, null, "蛋卷与中证官网均未覆盖该指数（可在档案中配置代理指数）"));
         }
 
         // 全部估值 upsert 一次提交（N 次写往返 → 1 次）

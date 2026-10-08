@@ -40,6 +40,14 @@ public sealed class EastMoneyNavSource(HttpClient http) : INavQuoteSource
         var accNav = ParseDecimal(row, "LJJZ");
         var change = ParseDecimal(row, "JZZZL");
 
+        // 合理性守卫：场外基金单日确认涨幅超 ±25% 只可能源于份额折算、巨额赎回费计入
+        // 或数据源脏值（如开盘初占位数据），此时涨幅口径不可信——净值本身仍采信，
+        // 仅把涨幅置空，避免看板"日涨跌/当日盈亏"被污染。
+        if (change is { } c && Math.Abs(c) > 25m)
+        {
+            change = null;
+        }
+
         return new NavQuote(date, unitNav, accNav, change);
     }
 

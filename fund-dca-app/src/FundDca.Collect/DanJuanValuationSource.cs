@@ -25,10 +25,15 @@ public sealed class DanJuanValuationSource(HttpClient http)
     /// <summary>系统内裸代码 → 蛋卷外部代码。未列出的代码若带前缀可直接透传。</summary>
     public static string ToExternalCode(string code) => code switch
     {
-        // 上交所
-        _ when code.StartsWith("000", StringComparison.Ordinal) && code.Length == 6 => $"SH{code}",
         // 深交所/国证
-        _ when code.StartsWith("399", StringComparison.Ordinal) => $"SZ{code}",
+        _ when code.Length == 6 && code.StartsWith("399", StringComparison.Ordinal) => $"SZ{code}",
+        // 中证跨市场系列（930/931/932/933/935/950/980 等）：蛋卷以 CSI 为前缀
+        _ when code.Length == 6
+            && (code.StartsWith("93", StringComparison.Ordinal)
+                || code.StartsWith("95", StringComparison.Ordinal)
+                || code.StartsWith("98", StringComparison.Ordinal)) => $"CSI{code}",
+        // 上交所
+        _ when code.Length == 6 && code.StartsWith("000", StringComparison.Ordinal) => $"SH{code}",
         // 中证 H 系列（H30269 等）
         _ when code.StartsWith('H') && code != "HSTECH" => $"CSI{code}",
         // 港股
