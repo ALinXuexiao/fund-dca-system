@@ -47,7 +47,7 @@ public static class DbSeeder
         {
             new() { Code = "930050", Name = "中证A50", Metric = ValuationMetric.PeTtm, ProxyCode = "000300" },
             new() { Code = "H30269", Name = "中证红利低波动", Metric = ValuationMetric.EarningsYield, LowThresholdPercent = 10m, HighThresholdPercent = 6.4m },
-            new() { Code = "931069", Name = "中金300", Metric = ValuationMetric.PeTtm },
+            new() { Code = "931069", Name = "中金300", Metric = ValuationMetric.EarningsYield, LowThresholdPercent = 10m, HighThresholdPercent = 6.4m },
             new() { Code = "932047", Name = "中证REITs全收益", Metric = ValuationMetric.None },
             new() { Code = "399393", Name = "国证房地产", Metric = ValuationMetric.Pb },
             new() { Code = "931139", Name = "中证消费50", Metric = ValuationMetric.PeTtm, ProxyCode = "000932" },
