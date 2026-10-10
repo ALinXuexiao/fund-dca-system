@@ -12,6 +12,15 @@ namespace FundDca.Api.Services;
 /// </summary>
 public class DecisionService(FundDcaDbContext db)
 {
+    /// <summary>
+    /// 估值掉队宽限天数：某指数最新估值日比"全市场最新估值日"落后超过此值即按灰灯处理。
+    /// 5 天可覆盖周末 + 1~2 个交易日的发布延迟；数据源连续失败约一周后灯变灰。
+    /// </summary>
+    private const int StaleGraceDays = 5;
+
+    /// <summary>与 DcaDecisionEngine 中 NoData 阻断文案保持一致，过期时替换为更具体的说明。</summary>
+    private const string NoDataBlocker = "条件① 不满足：暂无指数估值数据，无法判定低估区间";
+
     /// <summary>单行设置不存在时的兜底（正常由播种保证存在）。</summary>
     private async Task<DcaSetting> GetSettingAsync(CancellationToken ct)
     {
@@ -68,6 +77,16 @@ public class DecisionService(FundDcaDbContext db)
         var latestVal = (await db.LatestValuationsAsync(ct))
             .ToDictionary(v => v.IndexCode);
 
+        // 数据新鲜度基准：全市场最新一条估值的交易日。采集失败不会删除旧行，直接读会把
+        // 上周的估值当成今天的来亮灯；以"市场数据前沿"识别掉队指数——周末/节假日所有
+        // 指数一起停更，前沿同步后移，不会误判灰灯。手工估值（MANUAL）不参与、不受限。
+        var frontier = latestVal.Values
+            .Where(v => v.Source != "MANUAL")
+            .Select(v => v.TradeDate)
+            .DefaultIfEmpty(DateOnly.MinValue)
+            .Max();
+        var staleSince = new Dictionary<string, DateOnly>();
+
         // B5 去重：非主基金 → 同组主基金代码
         var groups = await db.OverlapGroups.AsNoTracking()
             .Include(g => g.Members).ToListAsync(ct);
@@ -94,16 +113,26 @@ public class DecisionService(FundDcaDbContext db)
         {
             var metricKind = f.TrackedIndex?.Metric ?? ValuationMetric.None;
             decimal? percentile = null;
-            if (f.TrackedIndex is { Metric: not ValuationMetric.None } idx &&
-                latestVal.TryGetValue(idx.Code, out var v))
+            if (f.TrackedIndex is { Metric: not ValuationMetric.None } idxRaw
+                && latestVal.TryGetValue(idxRaw.Code, out var vRaw))
             {
-                percentile = idx.Metric switch
+                if (vRaw.Source == "MANUAL"
+                    || frontier == DateOnly.MinValue
+                    || frontier.DayNumber - vRaw.TradeDate.DayNumber <= StaleGraceDays)
                 {
-                    // 盈利收益率 E/P = 1/PE-TTM × 100%，越高越便宜；PE 缺失/非正视为无数据
-                    ValuationMetric.EarningsYield => v.PeTtm is > 0m ? Math.Round(100m / v.PeTtm.Value, 2) : null,
-                    ValuationMetric.Pb => v.PbPercentile,
-                    _ => v.PePercentile
-                };
+                    percentile = idxRaw.Metric switch
+                    {
+                        // 盈利收益率 E/P = 1/PE-TTM × 100%，越高越便宜；PE 缺失/非正视为无数据
+                        ValuationMetric.EarningsYield => vRaw.PeTtm is > 0m ? Math.Round(100m / vRaw.PeTtm.Value, 2) : null,
+                        ValuationMetric.Pb => vRaw.PbPercentile,
+                        _ => vRaw.PePercentile
+                    };
+                }
+                else
+                {
+                    // 旧行还在但已掉队：引擎收到 null → 灰灯；DTO 阶段补明确的过期说明
+                    staleSince[f.Code] = vRaw.TradeDate;
+                }
             }
 
             inputs.Add(new DecisionInput(
@@ -137,8 +166,9 @@ public class DecisionService(FundDcaDbContext db)
             }
 
             var metric = idx?.Metric.ToString();
+            var stale = staleSince.TryGetValue(d.FundCode, out var staleDate);
             decimal? metricValue = null;
-            if (idx is not null && val is not null && idx.Metric != ValuationMetric.None)
+            if (idx is not null && val is not null && !stale && idx.Metric != ValuationMetric.None)
             {
                 metricValue = idx.Metric switch
                 {
@@ -147,6 +177,16 @@ public class DecisionService(FundDcaDbContext db)
                     ValuationMetric.EarningsYield => val.PeTtm is > 0m ? Math.Round(100m / val.PeTtm.Value, 2) : null,
                     _ => val.PeTtm
                 };
+            }
+
+            // 过期行：把引擎的通用"暂无数据"替换为明确的掉队说明（保留占比类其他阻断项）
+            var blockers = d.Blockers.ToList();
+            if (stale)
+            {
+                blockers.Remove(NoDataBlocker);
+                blockers.Insert(0,
+                    $"条件① 不满足：指数估值已 {frontier.DayNumber - staleDate.DayNumber} 天未更新" +
+                    $"（最新 {staleDate:yyyy-MM-dd}，市场数据已至 {frontier:yyyy-MM-dd}），按灰灯处理");
             }
 
             dtos.Add(new FundDecisionDto
@@ -166,10 +206,11 @@ public class DecisionService(FundDcaDbContext db)
                 MetricValue = metricValue,
                 // 盈利收益率口径展示绝对值 E/P（metricValue），不展示历史百分位
                 Percentile = idx?.Metric == ValuationMetric.EarningsYield ? null : d.Percentile,
+                // 过期仍如实展示最后估值日期，配合灰灯与 blockers 说明
                 ValuationDate = val?.TradeDate.ToString("yyyy-MM-dd"),
                 TotalReturnPercent = d.TotalReturnPercent,
                 SuggestedAmount = d.SuggestedAmount,
-                Blockers = d.Blockers.ToList(),
+                Blockers = blockers,
                 Notes = d.Notes.ToList(),
             });
         }

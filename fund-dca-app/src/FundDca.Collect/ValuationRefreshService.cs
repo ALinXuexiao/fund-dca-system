@@ -132,8 +132,10 @@ public sealed class ValuationRefreshService(
             }
 
             // ② 蛋卷未覆盖：PE 口径取中证官网该指数自有 PE 历史，按配置窗口现算百分位。
+            //    盈利收益率（E/P）底层同样是 PE-TTM 现算，也走此分支。
             //    不用"代理估值"记账——这是本指数自己的估值水平。
-            if (idx.Metric == ValuationMetric.PeTtm)
+            if (idx.Metric == ValuationMetric.PeTtm
+                || idx.Metric == ValuationMetric.EarningsYield)
             {
                 IReadOnlyList<CsiPePoint> series;
                 try
