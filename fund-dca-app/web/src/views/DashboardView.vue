@@ -630,7 +630,7 @@ watch(
     <!-- 指标卡 -->
     <div class="cards">
       <div class="card">
-        <div class="label">持仓总市值（分母 D）</div>
+        <div class="label">持仓总市值</div>
         <div class="value">¥{{ fmtMoney(data.denominator) }}</div>
         <div class="sub2">权益 {{ fmtMoney(data.equityMarketValue) }} · 稳健 {{ fmtMoney(data.stableMarketValue) }}（含债券/货币）</div>
       </div>
@@ -646,7 +646,7 @@ watch(
             {{ data.equityPnl >= 0 ? '+' : '' }}¥{{ fmtMoney(data.equityPnl) }}
             <span style="font-size:16px">({{ fmtPct(data.equityPnlPercent) }})</span>
           </div>
-          <div class="sub2">本金 ¥{{ fmtMoney(data.equityCost) }}（当前持仓周期）</div>
+          <div class="sub2">本金 ¥{{ fmtMoney(data.equityCost) }}</div>
         </template>
         <template v-else>
           <div class="value" style="color:var(--muted)">—</div>
@@ -710,11 +710,11 @@ watch(
     <div class="charts">
       <div class="chart-card">
         <h3>赛道占比（含稳健资产）</h3>
-        <div class="hint">债券/货币以灰褐色区分，计入 D 但不参与 B4</div>
+        <div class="hint">债券/货币以灰褐色区分</div>
         <div ref="donutEl" class="chart-box"></div>
       </div>
       <div class="chart-card">
-        <h3>单只基金占比（B3 红线 10%，严格小于）</h3>
+        <h3>单只基金占比（红线 10%，严格小于）</h3>
         <div class="hint">超线基金红色显示，定投判定不通过</div>
         <div ref="barEl" class="chart-box"></div>
       </div>
@@ -763,7 +763,7 @@ watch(
           <tr>
             <th>信号</th>
             <th class="l">基金 / 跟踪指数</th>
-            <th>总收益率<span class="th-sub">条件②</span></th>
+            <th>总收益率<span class="th-sub">负数 ②</span></th>
             <th>单只占比<span class="th-sub">&lt;10% ③</span></th>
             <th>赛道占比<span class="th-sub">&lt;15% ④</span></th>
             <th>口径</th>
@@ -901,7 +901,7 @@ watch(
             <th>盘中估算<span class="th-sub">指数推算</span></th>
             <th>份额</th>
             <th>当前市值</th>
-            <th>占比 D</th>
+            <th>占比</th>
             <th>累计收益</th>
             <th style="text-align:center">操作</th>
           </tr>

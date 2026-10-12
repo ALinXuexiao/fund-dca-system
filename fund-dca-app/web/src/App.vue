@@ -33,7 +33,7 @@ onMounted(async () => {
     <header class="topbar">
       <div>
         <h1>基金持仓看板与定投决策系统</h1>
-        <p class="sub">M1 盘后看板 · M2 人工买入 · M3 资产证明导入对账与版本回滚 · 真实净值采集（天天基金）</p>
+        <p class="sub">估值采集（蛋卷基金、中证指数） · 真实净值采集（天天基金）</p>
         <nav class="tabs">
           <button :class="{ active: tab === 'dashboard' }" @click="tab = 'dashboard'">持仓看板</button>
           <button :class="{ active: tab === 'import' }" @click="tab = 'import'">导入对账</button>
