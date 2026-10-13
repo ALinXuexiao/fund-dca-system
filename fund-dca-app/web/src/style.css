@@ -45,6 +45,9 @@ h1, h2, h3 { margin: 0; }
 .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cdd6e0; }
 .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--down); box-shadow: 0 0 6px rgba(46,139,111,.8); }
 .status.bad .dot { background: var(--danger); box-shadow: 0 0 6px rgba(176,58,46,.8); }
+/* 尚在确认后端状态（启动时后端可能仍在编译/连库）：黄灯 + 呼吸动画 */
+.status.pending .dot { background: var(--warn); box-shadow: 0 0 6px rgba(214,158,46,.8); animation: status-pulse 1.2s ease-in-out infinite; }
+@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 .tabs { display: flex; gap: 4px; margin-top: 10px; }
 .tabs button {
@@ -175,3 +178,36 @@ input.num:focus { outline: none; border-color: var(--accent); }
   font-size: 13.5px; box-shadow: 0 8px 24px rgba(15,23,42,.25); z-index: 60;
 }
 .toast.err { background: var(--danger); }
+
+/* ---------- 数据加载骨架屏（先撑出页面结构，避免"等待全部加载完"的空白感） ---------- */
+.sk { animation: sk-fade .35s ease-out both; }
+@keyframes sk-fade { from { opacity: .5; } to { opacity: 1; } }
+
+.sk-line {
+  display: block; height: 13px; border-radius: 6px;
+  background: linear-gradient(90deg, #eceef2 25%, #f6f7f9 37%, #eceef2 63%);
+  background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite;
+}
+@keyframes sk-shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+
+.sk-line.tall { height: 26px; }
+.sk-line + .sk-line { margin-top: 10px; }
+.w80 { width: 80px; }
+.w140 { width: 140px; }
+.w160 { width: 160px; }
+.w220 { width: 220px; }
+.w260 { width: 260px; }
+.wfull { width: 100%; }
+
+.sk-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.sk-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px; }
+.sk-charts { display: grid; grid-template-columns: 380px 1fr; gap: 16px; margin-bottom: 18px; }
+.sk-panel { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; }
+.sk-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; }
+.sk-card.chart { height: 300px; }
+.sk-hint { margin-top: 18px; text-align: center; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 1100px) {
+  .sk-cards { grid-template-columns: repeat(2, 1fr); }
+  .sk-charts { grid-template-columns: 1fr; }
+}

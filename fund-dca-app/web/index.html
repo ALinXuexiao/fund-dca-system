@@ -4,9 +4,106 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>基金持仓看板与定投决策系统</title>
+    <!--
+      首屏占位：启动脚本在「前端开发服务器一就绪」时就会打开浏览器，
+      此时 Vue 的 JS/样式可能还没下载执行完。这段内联样式与骨架不依赖任何
+      外部资源，能让用户立刻看到界面轮廓，而不是白屏。
+      Vue 挂载到 #app 时会整体替换掉这里的占位内容。
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #f4f5f7;
+        color: #1a2332;
+        font: 14px/1.5 "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      }
+      #boot-splash {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 22px 24px;
+      }
+      #boot-splash .boot-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      #boot-splash h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      #boot-splash .boot-sub {
+        margin: 6px 0 0;
+        color: #6b7280;
+        font-size: 13px;
+      }
+      #boot-splash .boot-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+        color: #6b7280;
+      }
+      #boot-splash .boot-spin {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid #d7dbe2;
+        border-top-color: #1a2332;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #boot-splash .boot-shimmer {
+        margin-top: 20px;
+        height: 14px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #eceef2 25%, #f6f7f9 37%, #eceef2 63%);
+        background-size: 400% 100%;
+        animation: boot-shimmer 1.4s ease infinite;
+      }
+      #boot-splash .boot-shimmer.short {
+        width: 38%;
+        margin-top: 12px;
+      }
+      #boot-splash .boot-hint {
+        margin-top: 22px;
+        color: #6b7280;
+        font-size: 13px;
+      }
+      @keyframes boot-shimmer {
+        from {
+          background-position: 100% 50%;
+        }
+        to {
+          background-position: 0 50%;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="boot-splash">
+        <div class="boot-bar">
+          <div>
+            <h1>基金持仓看板与定投决策系统</h1>
+            <p class="boot-sub">估值采集（蛋卷基金、中证指数） · 真实净值采集（天天基金）</p>
+          </div>
+          <div class="boot-chip"><span class="boot-spin"></span>界面加载中…</div>
+        </div>
+        <div class="boot-shimmer"></div>
+        <div class="boot-shimmer short"></div>
+        <p class="boot-hint">正在加载界面资源，通常只需一两秒…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

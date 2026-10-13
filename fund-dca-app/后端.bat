@@ -1,6 +1,6 @@
 @echo off
 title FundDca Backend :5000
-rem 锁定工作目录到本文件所在文件夹（fund-dca-app），双击时工作目录才不会漂移
+rem Keep the working directory at this file's folder (fund-dca-app) so a double-click cannot drift.
 cd /d "%~dp0"
 
 echo ============================================

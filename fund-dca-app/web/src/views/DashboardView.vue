@@ -13,6 +13,7 @@ import {
   fetchPendingTrades,
   cancelTrade,
   fetchIntraday,
+  waitForBackend,
 } from '../api'
 import {
   FUND_TYPE_LABEL,
@@ -30,6 +31,8 @@ import {
 
 const loading = ref(true)
 const errorMsg = ref('')
+// 后端尚未就绪（还在编译/连云端库）时保持骨架屏，等它就绪后自动填入数据
+const waitingBackend = ref(false)
 const data = ref<Dashboard | null>(null)
 const decision = ref<Decision | null>(null)
 const refreshing = ref(false)
@@ -42,6 +45,10 @@ const intradayLoading = ref(false)
 /** 前端轮询间隔；后端指数行情缓存 30 秒，故 60 秒足够 */
 const INTRADAY_REFRESH_MS = 60_000
 let intradayTimer: number | undefined
+/** 后端未就绪时的首屏重试定时器 */
+let backendRetryTimer: number | undefined
+/** 首屏引导是否已完整执行过（避免重试路径重复启动盘中轮询/自动采集） */
+let bootstrapped = false
 
 const failures = ref<RefreshResult[] | null>(null)
 const valFailures = ref<{ indexCode: string; indexName: string; error: string | null }[] | null>(null)
@@ -90,20 +97,41 @@ function showToast(msg: string, err = false) {
   toastTimer = window.setTimeout(() => (toast.value = ''), 5000)
 }
 
-async function load(silent = false) {
+/**
+ * 加载看板数据，返回是否成功。
+ *
+ * 关键点：启动脚本为了让用户"打开即见界面"，只等前端就绪就开浏览器，
+ * 此时后端可能还在编译 + 连云端库，/health 尚不可用。所以这里先等后端
+ * （waitForBackend 会静默轮询 /health），未就绪时只置 waitingBackend 并返回 false，
+ * 由 bootstrap 保持骨架屏继续重试，而不是把"连不上 /api"当成加载失败弹给用户。
+ */
+async function load(silent = false): Promise<boolean> {
   if (!silent) {
     loading.value = true
     errorMsg.value = ''
   }
+  // 后端仍在启动时保持骨架屏：若此时把 loading 置回 false，模板会落到"没有 data"的分支，
+  // 页面先空白再闪回骨架，用户还可能在按钮不可用时点出 "Failed to fetch"
+  let keepSkeleton = false
   try {
+    const ready = await waitForBackend(silent ? 15_000 : 120_000)
+    if (!ready) {
+      waitingBackend.value = true
+      keepSkeleton = !silent
+      return false
+    }
+    waitingBackend.value = false
     const [dash, dec] = await Promise.all([fetchDashboard(), fetchDecision().catch(() => null)])
     data.value = dash
     decision.value = dec
     await loadPendingTrades()
+    errorMsg.value = ''
+    return true
   } catch (e) {
     errorMsg.value = (e as Error).message
+    return false
   } finally {
-    if (!silent) {
+    if (!silent && !keepSkeleton) {
       loading.value = false
     }
   }
@@ -572,17 +600,39 @@ function onResize() {
   barChart?.resize()
 }
 
-onMounted(async () => {
-  await load()
-  window.addEventListener('resize', onResize)
+/** 后端尚未就绪时，每 3 秒重试一次首屏加载（页面保持骨架屏可见） */
+function scheduleBackendRetry() {
+  window.clearTimeout(backendRetryTimer)
+  backendRetryTimer = window.setTimeout(() => void bootstrap(), 3000)
+}
+
+/**
+ * 首屏引导：启动脚本在前端一就绪就打开浏览器，此时后端可能仍在启动。
+ * 因此先等待后端（期间显示骨架屏），成功后再启动盘中估算与当天一次的自动采集。
+ */
+async function bootstrap() {
+  const ok = await load()
+  if (!ok) {
+    // 仅当"后端还没起来"时自动重试；接口本身报错交给错误框 + 手动重试
+    if (waitingBackend.value) scheduleBackendRetry()
+    return
+  }
+  if (bootstrapped) return
+  bootstrapped = true
   // 盘中估算默认开启：立即取一次并每 60 秒轮询（后台进行，不阻塞页面）
   void startIntraday()
   // 先用库内数据把看板渲染出来，再在后台自动采集净值与估值（当天仅一次，不阻塞页面交互）
   void autoRefreshFirstOpen()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onResize)
+  void bootstrap()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   window.clearInterval(intradayTimer)
+  window.clearTimeout(backendRetryTimer)
   donutChart?.dispose()
   barChart?.dispose()
 })
@@ -601,7 +651,31 @@ watch(
 </script>
 
 <template>
-  <div v-if="loading" class="hint-msg">正在加载盘后看板…</div>
+  <!-- 骨架屏：后端尚未就绪时也先把整页结构画出来，而不是空白或只有一行文字 -->
+  <div v-if="loading" class="sk">
+    <div class="sk-toolbar">
+      <span class="sk-line w160"></span>
+      <span class="sk-line w260"></span>
+    </div>
+    <div class="sk-cards">
+      <div v-for="i in 4" :key="i" class="sk-card">
+        <span class="sk-line w80"></span>
+        <span class="sk-line w140 tall"></span>
+      </div>
+    </div>
+    <div class="sk-charts">
+      <div class="sk-card chart"></div>
+      <div class="sk-card chart"></div>
+    </div>
+    <div class="sk-panel">
+      <span class="sk-line w220"></span>
+      <span v-for="i in 6" :key="i" class="sk-line wfull"></span>
+    </div>
+    <p class="sk-hint">
+      <template v-if="waitingBackend">后端服务正在启动（首次需编译并连接云端数据库），界面已就绪，稍后自动填入数据…</template>
+      <template v-else>正在加载盘后看板…</template>
+    </p>
+  </div>
 
   <div v-else-if="errorMsg" class="error-box">
     <b>看板加载失败：</b>{{ errorMsg }}

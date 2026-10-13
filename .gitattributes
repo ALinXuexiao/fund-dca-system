@@ -15,6 +15,14 @@
 *.css text eol=lf
 *.html text eol=lf
 
+# Windows 启动脚本：cmd 在 call 场景下遇到 LF 结尾会误解析
+# （曾导致 logs\backend.err.log 里出现「'Backend' 不是内部或外部命令」），必须固定 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# WSH(VBScript) 使用 UTF-16LE 编码，禁止 git 改写换行与编码
+*.vbs binary
+
 # 二进制
 *.png binary
 *.jpg binary
