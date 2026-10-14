@@ -1,0 +1,144 @@
+/* ============================================================================
+   pixel2motion — Phase 3 choreography for the coin + rising-arrow mark.
+
+   Motion brief (see motion_spec.md)
+     Personality words : trustworthy · growing · refined
+     Personality preset: Trustworthy/Professional (fintech) with an Elegant/Premium
+                         cadence — precise landing, no cartoon bounce, gold reads as
+                         premium. Enter curve cubic-bezier(0,0,0.2,1), settle curve
+                         cubic-bezier(0.4,0,0.2,1), overshoot held to 1.5% (vs 1.08 for
+                         a playful mark) so the mark lands, it does not bounce.
+     Usage context     : splash / brand intro  ->  1600 ms, static final state after.
+     Choreography      : one clock, 1600 ms.
+                          coin  (primary)   enters with an anticipation wind-up, overshoots
+                                            to 1.5% and settles             0% -> 88%
+                          arrow (secondary) revealed by a wipe travelling along the arrow's
+                                            own rising axis (-38.97 deg), lower-left to
+                                            upper-right                     25% -> 72%
+                          sheen (tertiary)  a specular sweep crosses the finished coin as
+                                            secondary action in follow-through 58% -> 94%
+
+   Timeline (golden ratio 20 / 50 / 30)
+     anticipation 0.00 - 0.20  (   0 -  320 ms)  coin winds up, compresses to 0.845
+     action       0.20 - 0.70  ( 320 - 1120 ms)  coin expands and lands, arrow wipes on
+     follow-through 0.70 - 1.00 (1120 - 1600 ms) coin micro-settles, sheen crosses
+
+   All four animations share ONE clock (same duration, no delay, phase offsets live
+   inside the keyframes) so the ?t=<ms> QA hook seeks the whole choreography 1:1.
+
+   Chromium pitfall: animation-timing-function: var(--token) is silently dropped inside
+   @keyframes, which would turn every handoff into a linear speed cliff. Every keyframe
+   below therefore carries a LITERAL cubic-bezier(). Tokens are only used where
+   substitution is safe: the duration in the animation shorthand.
+   ============================================================================ */
+
+:root {
+  --p2m-duration: 1600ms;
+  /* Documentation tokens — mirrored as literals inside the keyframes above. */
+  --p2m-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --p2m-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
+  --p2m-ease-ant: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Scale/rotate pivots sit on each part's own geometry, never on the canvas. */
+#mark,
+#coin {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Primary: the coin. Everything else waits on it (root -> primary -> secondary). */
+#coin {
+  animation: p2m-coin-in var(--p2m-duration) both;
+}
+
+/* Secondary: the wipe band behind #arrow's mask. Pure translation, so it needs no
+   transform-box; it travels along the -38.97 deg axis established in the <defs>. */
+#arrowWipeBand {
+  animation: p2m-arrow-wipe var(--p2m-duration) both;
+}
+
+/* Tertiary: specular sweep as secondary action during follow-through. The group fades,
+   the band inside it travels. Both rest at invisible. */
+#coinSheen {
+  animation: p2m-sheen-fade var(--p2m-duration) both;
+}
+
+#coinSheenBand {
+  animation: p2m-sheen-sweep var(--p2m-duration) both;
+}
+
+@keyframes p2m-coin-in {
+  0% {
+    transform: scale(0.88) rotate(-3.4deg);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  9% {
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  /* Anticipation: wind up against the direction of travel before the expansion. */
+  20% {
+    transform: scale(0.845) rotate(-4.2deg);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+  /* Action peak: 1.5% overshoot — enough to read as arrival, not as a bounce. */
+  48% {
+    transform: scale(1.015) rotate(0.85deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  70% {
+    transform: scale(0.998) rotate(-0.18deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Follow-through: settle to the geometry-QA'd final frame and hold it. */
+  88%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes p2m-arrow-wipe {
+  /* Staging hold: the arrow stays hidden while the coin winds up and expands. */
+  0%,
+  25% {
+    transform: translateX(-196px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* The front clears the tip (local x = 85.42) with margin, so 72% IS the resting
+     state — the final frame is bit-identical to the static vector. */
+  72%,
+  100% {
+    transform: translateX(0px);
+  }
+}
+
+@keyframes p2m-sheen-fade {
+  0%,
+  58% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  70% {
+    opacity: 0.85;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  94%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes p2m-sheen-sweep {
+  0%,
+  58% {
+    transform: translateX(-190px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  94%,
+  100% {
+    transform: translateX(190px);
+  }
+}

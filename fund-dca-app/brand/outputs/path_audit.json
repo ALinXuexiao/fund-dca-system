@@ -1,0 +1,68 @@
+{
+  "segment_count": 14,
+  "cubic_segments": 0,
+  "line_segments": 14,
+  "closed": true,
+  "budget": null,
+  "over_budget": false,
+  "median_segment_length": 24.241,
+  "short_segment_warnings": [],
+  "join_angle_threshold_degrees": 8.0,
+  "join_angle_warnings": [
+    {
+      "join_after_segment": 1,
+      "angle_degrees": 111.792
+    },
+    {
+      "join_after_segment": 2,
+      "angle_degrees": 81.232
+    },
+    {
+      "join_after_segment": 3,
+      "angle_degrees": 72.136
+    },
+    {
+      "join_after_segment": 4,
+      "angle_degrees": 79.444
+    },
+    {
+      "join_after_segment": 5,
+      "angle_degrees": 77.661
+    },
+    {
+      "join_after_segment": 6,
+      "angle_degrees": 74.253
+    },
+    {
+      "join_after_segment": 7,
+      "angle_degrees": 78.183
+    },
+    {
+      "join_after_segment": 8,
+      "angle_degrees": 99.78
+    },
+    {
+      "join_after_segment": 9,
+      "angle_degrees": 76.231
+    },
+    {
+      "join_after_segment": 10,
+      "angle_degrees": 78.634
+    },
+    {
+      "join_after_segment": 11,
+      "angle_degrees": 79.239
+    },
+    {
+      "join_after_segment": 12,
+      "angle_degrees": 73.16
+    },
+    {
+      "join_after_segment": 13,
+      "angle_degrees": 56.153
+    }
+  ],
+  "input_svg": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\logo.svg",
+  "selected_path_index": 0,
+  "path_count": 1
+}

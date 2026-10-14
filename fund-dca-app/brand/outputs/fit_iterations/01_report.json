@@ -1,0 +1,25 @@
+{
+  "svg": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\logo.svg",
+  "tag": "01",
+  "coin": {
+    "iou": 0.9054,
+    "a_px": 42356,
+    "b_px": 39363,
+    "a_only": 3526,
+    "b_only": 533
+  },
+  "arrow": {
+    "iou": 0.9241,
+    "a_px": 3594,
+    "b_px": 3581,
+    "a_only": 148,
+    "b_only": 135
+  },
+  "combined": {
+    "iou": 0.9796,
+    "a_px": 42356,
+    "b_px": 42549,
+    "a_only": 340,
+    "b_only": 533
+  }
+}

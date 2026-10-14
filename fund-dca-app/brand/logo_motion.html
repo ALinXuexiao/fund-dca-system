@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coin & Rising Arrow</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #ffffff;
+      --surface: #f5f5f3;
+      --border: rgba(0,0,0,0.08);
+      --text-primary: #0d0d0d;
+      --text-secondary: #777;
+      --text-tertiary: #aaa;
+      --accent: #e64036;
+      --speed-progress: 9%;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      padding: 2rem;
+    }
+
+    #logo-root {
+      width: min(92vw, 179.2px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: visible;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #logo-root svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+      text-rendering: geometricPrecision;
+    }
+
+    .atomic-motions {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-end;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .atom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .atom-stage {
+      width: 74px;
+      height: 74px;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .atom-stage img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transition: transform 260ms cubic-bezier(0.34,1.56,0.64,1);
+      transform-origin: center;
+    }
+
+    .atom-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      white-space: nowrap;
+    }
+
+    .principles {
+      max-width: 760px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .pill {
+      font-size: 11px;
+      line-height: 1;
+      padding: 5px 10px;
+      border: 0.5px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .pill.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      font: 12px/1.2 inherit;
+      letter-spacing: 0.04em;
+      padding: 8px 18px;
+      border: 0.5px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    button.primary {
+      color: var(--bg);
+      background: var(--text-primary);
+      border-color: var(--text-primary);
+    }
+
+    .speed-control {
+      width: min(340px, 80vw);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border: 0.5px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-secondary);
+    }
+
+    .speed-caption,
+    .speed-value {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .speed-value {
+      min-width: 46px;
+      text-align: right;
+      color: var(--text-primary);
+      text-transform: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      min-width: 120px;
+      height: 24px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: grab;
+      accent-color: var(--accent);
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--speed-progress), var(--border) var(--speed-progress), var(--border) 100%);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      margin-top: -6.5px;
+      border-radius: 50%;
+      border: 2px solid var(--bg);
+      background: var(--accent);
+      box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+    }
+
+    .footer {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .p2m-chromeless .atomic-motions,
+    .p2m-chromeless .principles,
+    .p2m-chromeless .controls,
+    .p2m-chromeless .footer {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      /* ============================================================================
+         pixel2motion — Phase 3 choreography for the coin + rising-arrow mark.
+
+         Motion brief (see motion_spec.md)
+           Personality words : trustworthy · growing · refined
+           Personality preset: Trustworthy/Professional (fintech) with an Elegant/Premium
+                               cadence — precise landing, no cartoon bounce, gold reads as
+                               premium. Enter curve cubic-bezier(0,0,0.2,1), settle curve
+                               cubic-bezier(0.4,0,0.2,1), overshoot held to 1.5% (vs 1.08 for
+                               a playful mark) so the mark lands, it does not bounce.
+           Usage context     : splash / brand intro  ->  1600 ms, static final state after.
+           Choreography      : one clock, 1600 ms.
+                                coin  (primary)   enters with an anticipation wind-up, overshoots
+                                                  to 1.5% and settles             0% -> 88%
+                                arrow (secondary) revealed by a wipe travelling along the arrow's
+                                                  own rising axis (-38.97 deg), lower-left to
+                                                  upper-right                     25% -> 72%
+                                sheen (tertiary)  a specular sweep crosses the finished coin as
+                                                  secondary action in follow-through 58% -> 94%
+
+         Timeline (golden ratio 20 / 50 / 30)
+           anticipation 0.00 - 0.20  (   0 -  320 ms)  coin winds up, compresses to 0.845
+           action       0.20 - 0.70  ( 320 - 1120 ms)  coin expands and lands, arrow wipes on
+           follow-through 0.70 - 1.00 (1120 - 1600 ms) coin micro-settles, sheen crosses
+
+         All four animations share ONE clock (same duration, no delay, phase offsets live
+         inside the keyframes) so the ?t=<ms> QA hook seeks the whole choreography 1:1.
+
+         Chromium pitfall: animation-timing-function: var(--token) is silently dropped inside
+         @keyframes, which would turn every handoff into a linear speed cliff. Every keyframe
+         below therefore carries a LITERAL cubic-bezier(). Tokens are only used where
+         substitution is safe: the duration in the animation shorthand.
+         ============================================================================ */
+
+      :root {
+        --p2m-duration: 1600ms;
+        /* Documentation tokens — mirrored as literals inside the keyframes above. */
+        --p2m-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+        --p2m-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
+        --p2m-ease-ant: cubic-bezier(0.4, 0, 0.6, 1);
+      }
+
+      /* Scale/rotate pivots sit on each part's own geometry, never on the canvas. */
+      #mark,
+      #coin {
+        transform-box: fill-box;
+        transform-origin: center;
+      }
+
+      /* Primary: the coin. Everything else waits on it (root -> primary -> secondary). */
+      #coin {
+        animation: p2m-coin-in var(--p2m-duration) both;
+      }
+
+      /* Secondary: the wipe band behind #arrow's mask. Pure translation, so it needs no
+         transform-box; it travels along the -38.97 deg axis established in the <defs>. */
+      #arrowWipeBand {
+        animation: p2m-arrow-wipe var(--p2m-duration) both;
+      }
+
+      /* Tertiary: specular sweep as secondary action during follow-through. The group fades,
+         the band inside it travels. Both rest at invisible. */
+      #coinSheen {
+        animation: p2m-sheen-fade var(--p2m-duration) both;
+      }
+
+      #coinSheenBand {
+        animation: p2m-sheen-sweep var(--p2m-duration) both;
+      }
+
+      @keyframes p2m-coin-in {
+        0% {
+          transform: scale(0.88) rotate(-3.4deg);
+          opacity: 0;
+          animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        9% {
+          opacity: 1;
+          animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        /* Anticipation: wind up against the direction of travel before the expansion. */
+        20% {
+          transform: scale(0.845) rotate(-4.2deg);
+          animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+        }
+        /* Action peak: 1.5% overshoot — enough to read as arrival, not as a bounce. */
+        48% {
+          transform: scale(1.015) rotate(0.85deg);
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        70% {
+          transform: scale(0.998) rotate(-0.18deg);
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Follow-through: settle to the geometry-QA'd final frame and hold it. */
+        88%,
+        100% {
+          transform: scale(1) rotate(0deg);
+          opacity: 1;
+        }
+      }
+
+      @keyframes p2m-arrow-wipe {
+        /* Staging hold: the arrow stays hidden while the coin winds up and expands. */
+        0%,
+        25% {
+          transform: translateX(-196px);
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* The front clears the tip (local x = 85.42) with margin, so 72% IS the resting
+           state — the final frame is bit-identical to the static vector. */
+        72%,
+        100% {
+          transform: translateX(0px);
+        }
+      }
+
+      @keyframes p2m-sheen-fade {
+        0%,
+        58% {
+          opacity: 0;
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        70% {
+          opacity: 0.85;
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        94%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes p2m-sheen-sweep {
+        0%,
+        58% {
+          transform: translateX(-190px);
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        94%,
+        100% {
+          transform: translateX(190px);
+        }
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="logo-root" aria-label="Animated logo" data-p2m-duration="1600"></main>
+
+  <section class="atomic-motions" aria-label="Atomic motion studies">
+    <div class="atom" data-atom="hover"><div class="atom-stage"></div><span class="atom-label">Hover</span></div>
+    <div class="atom" data-atom="pulse"><div class="atom-stage"></div><span class="atom-label">Pulse</span></div>
+    <div class="atom" data-atom="arc"><div class="atom-stage"></div><span class="atom-label">Arc</span></div>
+    <div class="atom" data-atom="press"><div class="atom-stage"></div><span class="atom-label">Press</span></div>
+  </section>
+
+  <div class="principles" id="principlesRow">
+    <span class="pill" data-p="squashstretch">Squash &amp; stretch</span>
+    <span class="pill" data-p="anticipation">Anticipation</span>
+    <span class="pill" data-p="staging">Staging</span>
+    <span class="pill" data-p="followthrough">Follow through</span>
+    <span class="pill" data-p="overlap">Overlapping</span>
+    <span class="pill" data-p="slowinout">Slow in / out</span>
+    <span class="pill" data-p="arc">Arc</span>
+    <span class="pill" data-p="secondary">Secondary action</span>
+    <span class="pill" data-p="timing">Timing</span>
+    <span class="pill" data-p="appeal">Appeal</span>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="btnReplay" type="button">Replay</button>
+    <button id="btnSlow" type="button">Slow motion</button>
+    <label class="speed-control" for="speedSlider">
+      <span class="speed-caption">Speed</span>
+      <input id="speedSlider" type="range" min="0.25" max="2.5" step="0.05" value="0.45" aria-label="Animation speed">
+      <span class="speed-value" id="speedValue">0.45x</span>
+    </label>
+  </div>
+
+  <p class="footer">Click the main logo to replay | Drag speed | Try atomic motions</p>
+
+  <script>
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const LOGO = {"tag":"svg","attrs":{"viewBox":"0 0 256 256","width":"256","height":"256","role":"img","aria-labelledby":"brandTitle brandDesc"},"children":[{"tag":"title","attrs":{"id":"brandTitle"},"children":[],"text":"Coin with a rising trend arrow"},{"tag":"desc","attrs":{"id":"brandDesc"},"children":[],"text":"A gold coin mark carrying an upward zig-zag trend arrow. Six concentric\n  elliptical bands plus one analytic polygon, so every part can be choreographed on its own."},{"tag":"defs","attrs":{},"children":[{"tag":"linearGradient","attrs":{"id":"coinLipGrad","gradientUnits":"userSpaceOnUse","x1":"138.0","y1":"24.5","x2":"118.0","y2":"233.0"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#D5B673"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#E8D692"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#E9D288"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#E3C678"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#CFA14D"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#B1762D"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#AD6F2B"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#C48446"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#CE9058"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinBevelGrad","gradientUnits":"userSpaceOnUse","x1":"137.8","y1":"27.3","x2":"118.2","y2":"231.7"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#F7EB99"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#F7ED9B"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#F6EDA0"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#F2E28E"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#E3C25E"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#E4B446"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#D39837"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#D1983A"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#CF8C32"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinPlatformGrad","gradientUnits":"userSpaceOnUse","x1":"137.7","y1":"28.3","x2":"118.3","y2":"230.4"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#F7E488"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#F5DF80"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#F2D775"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#ECCF6A"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#E7C55E"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#DEB651"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#D3A546"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#C59139"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#BB822F"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinRingGrad","gradientUnits":"userSpaceOnUse","x1":"136.7","y1":"38.6","x2":"119.3","y2":"220.0"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#C59643"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#D2AD55"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#DAB85C"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#E4C464"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#E5C766"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#E1C368"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#DCB762"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#DAB667"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#D5AA5E"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinGrooveGrad","gradientUnits":"userSpaceOnUse","x1":"136.4","y1":"41.6","x2":"119.6","y2":"217.1"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#BD7227"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#C57B27"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#C87C27"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#D18A31"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#DD9C3C"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#ECBC50"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#F1D266"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#ECC558"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#F2D36D"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinFaceGrad","gradientUnits":"userSpaceOnUse","x1":"136.0","y1":"45.6","x2":"120.0","y2":"212.8"},"children":[{"tag":"stop","attrs":{"offset":"0.000","stop-color":"#F6DF82"},"children":[]},{"tag":"stop","attrs":{"offset":"0.125","stop-color":"#F4DC7D"},"children":[]},{"tag":"stop","attrs":{"offset":"0.250","stop-color":"#F1D370"},"children":[]},{"tag":"stop","attrs":{"offset":"0.375","stop-color":"#EDCA64"},"children":[]},{"tag":"stop","attrs":{"offset":"0.500","stop-color":"#E5BD57"},"children":[]},{"tag":"stop","attrs":{"offset":"0.625","stop-color":"#DDB04F"},"children":[]},{"tag":"stop","attrs":{"offset":"0.750","stop-color":"#D29F44"},"children":[]},{"tag":"stop","attrs":{"offset":"0.875","stop-color":"#C9923B"},"children":[]},{"tag":"stop","attrs":{"offset":"1.000","stop-color":"#C28832"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"arrowFill","gradientUnits":"userSpaceOnUse","x1":"200","y1":"70","x2":"70","y2":"195"},"children":[{"tag":"stop","attrs":{"offset":"0","stop-color":"#FAFAF8"},"children":[]},{"tag":"stop","attrs":{"offset":"1","stop-color":"#F4F4F1"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"arrowWipeGrad","x1":"0","y1":"0","x2":"1","y2":"0"},"children":[{"tag":"stop","attrs":{"offset":"0","stop-color":"#ffffff"},"children":[]},{"tag":"stop","attrs":{"offset":"0.985","stop-color":"#ffffff"},"children":[]},{"tag":"stop","attrs":{"offset":"1","stop-color":"#000000"},"children":[]}]},{"tag":"mask","attrs":{"id":"arrowWipe","maskUnits":"userSpaceOnUse","x":"0","y":"0","width":"256","height":"256"},"children":[{"tag":"g","attrs":{"transform":"translate(127.27 129.22) rotate(-38.969)"},"children":[{"tag":"rect","attrs":{"id":"arrowWipeBand","x":"-500.0","y":"-200","width":"594.9","height":"400","fill":"url(#arrowWipeGrad)"},"children":[]}]}]},{"tag":"clipPath","attrs":{"id":"coinClip"},"children":[{"tag":"ellipse","attrs":{"cx":"127.27","cy":"129.22","rx":"114.75","ry":"118.50"},"children":[]}]},{"tag":"linearGradient","attrs":{"id":"coinSheenGrad","x1":"0","y1":"0","x2":"1","y2":"0"},"children":[{"tag":"stop","attrs":{"offset":"0","stop-color":"#ffffff","stop-opacity":"0"},"children":[]},{"tag":"stop","attrs":{"offset":"0.5","stop-color":"#ffffff","stop-opacity":"1"},"children":[]},{"tag":"stop","attrs":{"offset":"1","stop-color":"#ffffff","stop-opacity":"0"},"children":[]}]}]},{"tag":"g","attrs":{"id":"mark"},"children":[{"tag":"g","attrs":{"id":"coin"},"children":[{"tag":"ellipse","attrs":{"id":"coinLip","cx":"127.27","cy":"129.22","rx":"114.73","ry":"118.48","fill":"url(#coinLipGrad)"},"children":[]},{"tag":"ellipse","attrs":{"id":"coinBevel","cx":"127.27","cy":"129.22","rx":"112.28","ry":"115.95","fill":"url(#coinBevelGrad)"},"children":[]},{"tag":"ellipse","attrs":{"id":"coinPlatform","cx":"127.27","cy":"129.22","rx":"110.69","ry":"114.31","fill":"url(#coinPlatformGrad)"},"children":[]},{"tag":"ellipse","attrs":{"id":"coinRing","cx":"127.27","cy":"129.22","rx":"99.32","ry":"102.56","fill":"url(#coinRingGrad)"},"children":[]},{"tag":"ellipse","attrs":{"id":"coinGroove","cx":"127.27","cy":"129.22","rx":"96.15","ry":"99.29","fill":"url(#coinGrooveGrad)"},"children":[]},{"tag":"ellipse","attrs":{"id":"coinFace","cx":"127.27","cy":"129.22","rx":"91.60","ry":"94.60","fill":"url(#coinFaceGrad)"},"children":[]}]},{"tag":"path","attrs":{"id":"arrow","pathLength":"1","fill":"url(#arrowFill)","mask":"url(#arrowWipe)","d":"M 194.428 76.433 L 191.556 109.045 L 182.491 104.461 L 161.317 134.044                L 143.582 128.374 L 123.773 165.186 L 100.671 158.585 L 83.113 187.021                L 65.557 180.674 L 90.416 137.015 L 113.731 143.651 L 132.739 106.750                L 155.420 113.465 L 166.528 96.575 L 162.293 86.511 Z"},"children":[]},{"tag":"g","attrs":{"id":"coinSheen","clip-path":"url(#coinClip)","opacity":"0"},"children":[{"tag":"g","attrs":{"transform":"rotate(-32 128 128)"},"children":[{"tag":"rect","attrs":{"id":"coinSheenBand","x":"-90","y":"-200","width":"180","height":"400","fill":"url(#coinSheenGrad)"},"children":[]}]}]}]}]};
+    const SVG_TEXT = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"\n     role=\"img\" aria-labelledby=\"brandTitle brandDesc\"><style>:root,svg{--bg:#ffffff;--surface:#f5f5f3;--text-primary:#0d0d0d;--text-secondary:#777;--text-tertiary:#aaa;--logo-wordmark:#363e47;--accent:#e64036;--red:#e64036;--red-bright:#ff493f;}<\/style>\n  <title id=\"brandTitle\">Coin with a rising trend arrow<\/title>\n  <desc id=\"brandDesc\">A gold coin mark carrying an upward zig-zag trend arrow. Six concentric\n  elliptical bands plus one analytic polygon, so every part can be choreographed on its own.<\/desc>\n\n  <!-- Geometry generated by brand/outputs/fit_work/gen_svg.py from measurements of the source\n       raster. Band radii are the radii that extremise luminance along 120 rays of the source;\n       the gradient stops are the source's own colour averaged into bins along one shared, nearly\n       vertical light axis, so every band is lit from the same direction. -->\n  <defs>\n    <linearGradient id=\"coinLipGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"138.0\" y1=\"24.5\" x2=\"118.0\" y2=\"233.0\">\n      <stop offset=\"0.000\" stop-color=\"#D5B673\"/>\n      <stop offset=\"0.125\" stop-color=\"#E8D692\"/>\n      <stop offset=\"0.250\" stop-color=\"#E9D288\"/>\n      <stop offset=\"0.375\" stop-color=\"#E3C678\"/>\n      <stop offset=\"0.500\" stop-color=\"#CFA14D\"/>\n      <stop offset=\"0.625\" stop-color=\"#B1762D\"/>\n      <stop offset=\"0.750\" stop-color=\"#AD6F2B\"/>\n      <stop offset=\"0.875\" stop-color=\"#C48446\"/>\n      <stop offset=\"1.000\" stop-color=\"#CE9058\"/>\n    <\/linearGradient>\n    <linearGradient id=\"coinBevelGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"137.8\" y1=\"27.3\" x2=\"118.2\" y2=\"231.7\">\n      <stop offset=\"0.000\" stop-color=\"#F7EB99\"/>\n      <stop offset=\"0.125\" stop-color=\"#F7ED9B\"/>\n      <stop offset=\"0.250\" stop-color=\"#F6EDA0\"/>\n      <stop offset=\"0.375\" stop-color=\"#F2E28E\"/>\n      <stop offset=\"0.500\" stop-color=\"#E3C25E\"/>\n      <stop offset=\"0.625\" stop-color=\"#E4B446\"/>\n      <stop offset=\"0.750\" stop-color=\"#D39837\"/>\n      <stop offset=\"0.875\" stop-color=\"#D1983A\"/>\n      <stop offset=\"1.000\" stop-color=\"#CF8C32\"/>\n    <\/linearGradient>\n    <linearGradient id=\"coinPlatformGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"137.7\" y1=\"28.3\" x2=\"118.3\" y2=\"230.4\">\n      <stop offset=\"0.000\" stop-color=\"#F7E488\"/>\n      <stop offset=\"0.125\" stop-color=\"#F5DF80\"/>\n      <stop offset=\"0.250\" stop-color=\"#F2D775\"/>\n      <stop offset=\"0.375\" stop-color=\"#ECCF6A\"/>\n      <stop offset=\"0.500\" stop-color=\"#E7C55E\"/>\n      <stop offset=\"0.625\" stop-color=\"#DEB651\"/>\n      <stop offset=\"0.750\" stop-color=\"#D3A546\"/>\n      <stop offset=\"0.875\" stop-color=\"#C59139\"/>\n      <stop offset=\"1.000\" stop-color=\"#BB822F\"/>\n    <\/linearGradient>\n    <linearGradient id=\"coinRingGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"136.7\" y1=\"38.6\" x2=\"119.3\" y2=\"220.0\">\n      <stop offset=\"0.000\" stop-color=\"#C59643\"/>\n      <stop offset=\"0.125\" stop-color=\"#D2AD55\"/>\n      <stop offset=\"0.250\" stop-color=\"#DAB85C\"/>\n      <stop offset=\"0.375\" stop-color=\"#E4C464\"/>\n      <stop offset=\"0.500\" stop-color=\"#E5C766\"/>\n      <stop offset=\"0.625\" stop-color=\"#E1C368\"/>\n      <stop offset=\"0.750\" stop-color=\"#DCB762\"/>\n      <stop offset=\"0.875\" stop-color=\"#DAB667\"/>\n      <stop offset=\"1.000\" stop-color=\"#D5AA5E\"/>\n    <\/linearGradient>\n    <linearGradient id=\"coinGrooveGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"136.4\" y1=\"41.6\" x2=\"119.6\" y2=\"217.1\">\n      <stop offset=\"0.000\" stop-color=\"#BD7227\"/>\n      <stop offset=\"0.125\" stop-color=\"#C57B27\"/>\n      <stop offset=\"0.250\" stop-color=\"#C87C27\"/>\n      <stop offset=\"0.375\" stop-color=\"#D18A31\"/>\n      <stop offset=\"0.500\" stop-color=\"#DD9C3C\"/>\n      <stop offset=\"0.625\" stop-color=\"#ECBC50\"/>\n      <stop offset=\"0.750\" stop-color=\"#F1D266\"/>\n      <stop offset=\"0.875\" stop-color=\"#ECC558\"/>\n      <stop offset=\"1.000\" stop-color=\"#F2D36D\"/>\n    <\/linearGradient>\n    <linearGradient id=\"coinFaceGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"136.0\" y1=\"45.6\" x2=\"120.0\" y2=\"212.8\">\n      <stop offset=\"0.000\" stop-color=\"#F6DF82\"/>\n      <stop offset=\"0.125\" stop-color=\"#F4DC7D\"/>\n      <stop offset=\"0.250\" stop-color=\"#F1D370\"/>\n      <stop offset=\"0.375\" stop-color=\"#EDCA64\"/>\n      <stop offset=\"0.500\" stop-color=\"#E5BD57\"/>\n      <stop offset=\"0.625\" stop-color=\"#DDB04F\"/>\n      <stop offset=\"0.750\" stop-color=\"#D29F44\"/>\n      <stop offset=\"0.875\" stop-color=\"#C9923B\"/>\n      <stop offset=\"1.000\" stop-color=\"#C28832\"/>\n    <\/linearGradient>\n    <linearGradient id=\"arrowFill\" gradientUnits=\"userSpaceOnUse\" x1=\"200\" y1=\"70\" x2=\"70\" y2=\"195\">\n      <stop offset=\"0\" stop-color=\"#FAFAF8\"/>\n      <stop offset=\"1\" stop-color=\"#F4F4F1\"/>\n    <\/linearGradient>\n    <!-- Motion scaffolding. Everything below rests in a state that leaves the resting\n         frame identical to the geometry-QA'd vector, so Phase 2 stays valid: the wipe band\n         covers the whole arrow (front at local x = 86, arrow ends at 84.08) and the sheen\n         group is base opacity 0. Only the animations move them. -->\n    <linearGradient id=\"arrowWipeGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#ffffff\"/>\n      <stop offset=\"0.985\" stop-color=\"#ffffff\"/>\n      <stop offset=\"1\" stop-color=\"#000000\"/>\n    <\/linearGradient>\n    <mask id=\"arrowWipe\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"256\" height=\"256\">\n      <g transform=\"translate(127.27 129.22) rotate(-38.969)\">\n        <rect id=\"arrowWipeBand\" x=\"-500.0\" y=\"-200\" width=\"594.9\" height=\"400\"\n              fill=\"url(#arrowWipeGrad)\"/>\n      <\/g>\n    <\/mask>\n    <clipPath id=\"coinClip\">\n      <ellipse cx=\"127.27\" cy=\"129.22\" rx=\"114.75\" ry=\"118.50\"/>\n    <\/clipPath>\n    <linearGradient id=\"coinSheenGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n      <stop offset=\"0.5\" stop-color=\"#ffffff\" stop-opacity=\"1\"/>\n      <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n    <\/linearGradient>\n  <\/defs>\n\n  <g id=\"mark\">\n    <g id=\"coin\">\n      <ellipse id=\"coinLip\" cx=\"127.27\" cy=\"129.22\" rx=\"114.73\" ry=\"118.48\" fill=\"url(#coinLipGrad)\"/>\n      <ellipse id=\"coinBevel\" cx=\"127.27\" cy=\"129.22\" rx=\"112.28\" ry=\"115.95\" fill=\"url(#coinBevelGrad)\"/>\n      <ellipse id=\"coinPlatform\" cx=\"127.27\" cy=\"129.22\" rx=\"110.69\" ry=\"114.31\" fill=\"url(#coinPlatformGrad)\"/>\n      <ellipse id=\"coinRing\" cx=\"127.27\" cy=\"129.22\" rx=\"99.32\" ry=\"102.56\" fill=\"url(#coinRingGrad)\"/>\n      <ellipse id=\"coinGroove\" cx=\"127.27\" cy=\"129.22\" rx=\"96.15\" ry=\"99.29\" fill=\"url(#coinGrooveGrad)\"/>\n      <ellipse id=\"coinFace\" cx=\"127.27\" cy=\"129.22\" rx=\"91.60\" ry=\"94.60\" fill=\"url(#coinFaceGrad)\"/>\n    <\/g>\n\n      <path id=\"arrow\" pathLength=\"1\" fill=\"url(#arrowFill)\" mask=\"url(#arrowWipe)\"\n            d=\"M 194.428 76.433 L 191.556 109.045 L 182.491 104.461 L 161.317 134.044\n               L 143.582 128.374 L 123.773 165.186 L 100.671 158.585 L 83.113 187.021\n               L 65.557 180.674 L 90.416 137.015 L 113.731 143.651 L 132.739 106.750\n               L 155.420 113.465 L 166.528 96.575 L 162.293 86.511 Z\"/>\n\n    <g id=\"coinSheen\" clip-path=\"url(#coinClip)\" opacity=\"0\">\n      <g transform=\"rotate(-32 128 128)\">\n        <rect id=\"coinSheenBand\" x=\"-90\" y=\"-200\" width=\"180\" height=\"400\"\n              fill=\"url(#coinSheenGrad)\"/>\n      <\/g>\n    <\/g>\n  <\/g>\n<\/svg>\n";
+    const SVG_URI = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(SVG_TEXT);
+    const DURATION = 1600;
+
+    let playbackRate = 0.45;
+    let pulseRaf = null;
+    let arcRaf = null;
+    window.__p2mReady = false;
+
+    function createSvgNode(node) {
+      const element = document.createElementNS(SVG_NS, node.tag);
+      for (const [name, value] of Object.entries(node.attrs || {})) {
+        element.setAttribute(name, value);
+      }
+      if (node.text) {
+        element.appendChild(document.createTextNode(node.text));
+      }
+      for (const child of node.children || []) {
+        element.appendChild(createSvgNode(child));
+      }
+      return element;
+    }
+
+    function heroAnimations() {
+      const root = document.getElementById("logo-root");
+      if (root.getAnimations) return root.getAnimations({ subtree: true });
+      return document.getAnimations().filter(animation => {
+        const target = animation.effect && animation.effect.target;
+        return target && root.contains(target);
+      });
+    }
+
+    function applyPlaybackRate() {
+      for (const animation of heroAnimations()) {
+        if (animation.updatePlaybackRate) animation.updatePlaybackRate(playbackRate);
+        else animation.playbackRate = playbackRate;
+      }
+    }
+
+    function renderHero() {
+      const root = document.getElementById("logo-root");
+      root.replaceChildren(createSvgNode(LOGO));
+      const svg = root.querySelector("svg");
+      if (svg) {
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.style.width = "100%";
+        svg.style.height = "auto";
+        svg.style.overflow = "visible";
+      }
+      requestAnimationFrame(() => requestAnimationFrame(applyPlaybackRate));
+    }
+
+    function flashPills(...names) {
+      document.querySelectorAll(".pill").forEach(pill => pill.classList.remove("active"));
+      names.forEach(name => {
+        const pill = document.querySelector(`[data-p="${name}"]`);
+        if (pill) pill.classList.add("active");
+      });
+    }
+
+    function cyclePrinciples() {
+      const phases = [
+        ["staging", "timing"],
+        ["anticipation", "squashstretch"],
+        ["arc", "slowinout"],
+        ["overlap", "followthrough"],
+        ["appeal"]
+      ];
+      let i = 0;
+      flashPills(...phases[0]);
+      return setInterval(() => {
+        i = (i + 1) % phases.length;
+        flashPills(...phases[i]);
+      }, Math.max(240, DURATION / phases.length / Math.max(playbackRate, 0.25)));
+    }
+
+    let pillTimer = null;
+    function replayMain() {
+      clearInterval(pillTimer);
+      renderHero();
+      pillTimer = cyclePrinciples();
+      setTimeout(() => {
+        clearInterval(pillTimer);
+        document.querySelectorAll(".pill").forEach(pill => pill.classList.remove("active"));
+      }, DURATION / Math.max(playbackRate, 0.25) + 600);
+    }
+
+    function formatSpeed(rate) {
+      return `${rate.toFixed(2)}x`;
+    }
+
+    function updateSpeedUI() {
+      const slider = document.getElementById("speedSlider");
+      const value = Number(slider.value);
+      const min = Number(slider.min);
+      const max = Number(slider.max);
+      const progress = ((value - min) / (max - min)) * 100;
+      document.getElementById("speedValue").textContent = formatSpeed(value);
+      slider.style.setProperty("--speed-progress", `${progress}%`);
+      const slow = value <= 0.251;
+      const btnSlow = document.getElementById("btnSlow");
+      btnSlow.textContent = slow ? "Normal speed" : "Slow motion";
+      btnSlow.style.background = slow ? "var(--surface)" : "";
+      btnSlow.style.borderColor = slow ? "var(--text-secondary)" : "";
+    }
+
+    function setPlaybackRate(rate, replay = false) {
+      const slider = document.getElementById("speedSlider");
+      const min = Number(slider.min);
+      const max = Number(slider.max);
+      playbackRate = Math.min(max, Math.max(min, Number(rate)));
+      slider.value = String(playbackRate);
+      updateSpeedUI();
+      applyPlaybackRate();
+      if (replay) replayMain();
+    }
+
+    function setupAtomImages() {
+      document.querySelectorAll(".atom-stage").forEach(stage => {
+        const img = new Image();
+        img.src = SVG_URI;
+        img.alt = "";
+        stage.appendChild(img);
+      });
+    }
+
+    function setupAtoms() {
+      const hover = document.querySelector('[data-atom="hover"] img');
+      const pulse = document.querySelector('[data-atom="pulse"] img');
+      const arc = document.querySelector('[data-atom="arc"] img');
+      const press = document.querySelector('[data-atom="press"] img');
+
+      hover.parentElement.addEventListener("mouseenter", () => {
+        flashPills("squashstretch", "appeal");
+        hover.style.transform = "scale(1.08) rotate(-1.5deg)";
+      });
+      hover.parentElement.addEventListener("mouseleave", () => {
+        hover.style.transform = "scale(1)";
+      });
+
+      function pulseTick(ts) {
+        const p = (Math.sin(ts / 900) + 1) / 2;
+        pulse.style.transform = `scale(${1 + 0.1 * p})`;
+        pulseRaf = requestAnimationFrame(pulseTick);
+      }
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        pulseRaf = requestAnimationFrame(pulseTick);
+      }
+
+      let arcAngle = -14;
+      let arcVel = 0;
+      function arcTick() {
+        arcVel += (0 - arcAngle) * 0.08;
+        arcVel *= 0.86;
+        arcAngle += arcVel;
+        arc.style.transform = `rotate(${arcAngle}deg)`;
+        arcRaf = requestAnimationFrame(arcTick);
+      }
+      arc.parentElement.addEventListener("mouseenter", () => {
+        flashPills("arc", "anticipation", "appeal");
+        cancelAnimationFrame(arcRaf);
+        arcAngle = 28;
+        arcVel = 0;
+        arcTick();
+      });
+      arc.parentElement.addEventListener("mouseleave", () => {
+        arcAngle = 0;
+      });
+
+      press.parentElement.addEventListener("mousedown", () => {
+        flashPills("squashstretch", "anticipation");
+        press.style.transform = "scaleX(1.10) scaleY(0.88)";
+      });
+      ["mouseup", "mouseleave"].forEach(ev => {
+        press.parentElement.addEventListener(ev, () => {
+          press.style.transform = "scale(1)";
+        });
+      });
+    }
+
+    function applyQaMode() {
+      const params = new URLSearchParams(location.search);
+      const seekMs = params.get("t");
+      const staticMode = params.get("static");
+      if (seekMs === null && staticMode === null) {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          applyPlaybackRate();
+          window.__p2mReady = true;
+        }));
+        return;
+      }
+
+      document.documentElement.classList.add("p2m-chromeless");
+      cancelAnimationFrame(pulseRaf);
+      cancelAnimationFrame(arcRaf);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        for (const animation of heroAnimations()) {
+          if (staticMode !== null) {
+            try {
+              animation.finish();
+            } catch (err) {
+              animation.cancel();
+            }
+          } else {
+            animation.pause();
+            animation.currentTime = Number(seekMs);
+          }
+        }
+        window.__p2mReady = true;
+      }));
+    }
+
+    document.getElementById("btnReplay").addEventListener("click", replayMain);
+    document.getElementById("logo-root").addEventListener("click", replayMain);
+    document.getElementById("speedSlider").addEventListener("input", event => {
+      setPlaybackRate(event.target.value, false);
+    });
+    document.getElementById("btnSlow").addEventListener("click", () => {
+      const slow = Number(document.getElementById("speedSlider").value) <= 0.251;
+      setPlaybackRate(slow ? 0.45 : 0.25, true);
+    });
+
+    setupAtomImages();
+    setupAtoms();
+    setPlaybackRate(0.45, false);
+    renderHero();
+    applyQaMode();
+  </script>
+</body>
+</html>

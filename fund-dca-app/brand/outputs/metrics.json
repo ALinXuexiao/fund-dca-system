@@ -1,0 +1,48 @@
+{
+  "input": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\source\\source.png",
+  "foreground_detection": {
+    "mode": "alpha",
+    "alpha_threshold": 12
+  },
+  "groups": [
+    {
+      "fill": "#c78e38",
+      "area_pixels": 13220,
+      "loop_count": 95,
+      "point_count": 582
+    },
+    {
+      "fill": "#f2d571",
+      "area_pixels": 12049,
+      "loop_count": 242,
+      "point_count": 1257
+    },
+    {
+      "fill": "#f4e5bc",
+      "area_pixels": 8914,
+      "loop_count": 196,
+      "point_count": 1034
+    },
+    {
+      "fill": "#e0b754",
+      "area_pixels": 8872,
+      "loop_count": 552,
+      "point_count": 2398
+    }
+  ],
+  "metrics": {
+    "source_foreground_pixels": 43055,
+    "vector_foreground_pixels": 42587,
+    "intersection_pixels": 42262,
+    "union_pixels": 43380,
+    "iou": 0.974228,
+    "recall_source_covered_by_vector": 0.981582,
+    "precision_vector_inside_source": 0.992369
+  },
+  "outputs": {
+    "svg": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\outputs\\logo.svg",
+    "html": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\outputs\\logo.html",
+    "vector_render": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\outputs\\vector_render.png",
+    "overlay": "C:\\Users\\Administrator\\.trae-cn\\assistant\\fund-dca-system\\fund-dca-app\\brand\\outputs\\overlay.png"
+  }
+}
