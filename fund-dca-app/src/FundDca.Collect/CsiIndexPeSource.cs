@@ -7,7 +7,11 @@ public sealed record CsiPePoint(DateOnly TradeDate, decimal Pe);
 
 /// <summary>
 /// 中证指数官网「指数估值」数据源（公开 JSON，无需鉴权）。
-/// 接口字段名为 <c>peg</c>，实际返回的是当日 PE-TTM（官网估值图表即取此值）。
+/// 接口字段名为 <c>peg</c>，实际返回的是当日滚动市盈率 PE-TTM（官网详情页估值图即取此值）。
+/// 注意：官网「指数估值」下载文件（{code}indicator.xls）里的 P/E1、P/E2 均为静态市盈率
+/// （净利润取最新年报，见中证《业务常见问题答疑》第 20 条），与本接口的 TTM 口径不同，
+/// 常态下 TTM 低于静态，二者不可混用；滚动市盈率定义见同文档第 21 条
+/// （Σ收盘价×总股本 / ΣEPS_ttm×总股本）。
 /// 与蛋卷互补：蛋卷只覆盖精选的 60+ 指数，中证官网覆盖全部中证系列指数。
 /// </summary>
 public sealed class CsiIndexPeSource(HttpClient http)
