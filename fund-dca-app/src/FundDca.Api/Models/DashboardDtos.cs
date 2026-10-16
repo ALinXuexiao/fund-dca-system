@@ -54,7 +54,7 @@ public record DashboardRowDto
     public decimal? TotalReturnPercent { get; init; }
     public decimal WeightPercent { get; init; }
 
-    /// <summary>净值日期早于主日期（QDII 滞后）</summary>
+    /// <summary>净值日期早于主日期（该基金当日净值尚未披露，不限 QDII）</summary>
     public bool Stale { get; init; }
     public bool IsMoney { get; init; }
     public string? Source { get; init; }

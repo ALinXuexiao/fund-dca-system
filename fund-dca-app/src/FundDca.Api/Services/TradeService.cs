@@ -9,6 +9,8 @@ namespace FundDca.Api.Services;
 /// <summary>
 /// 买入流水：登记即预入账，T 日收盘净值到位后校正份额。
 /// 规则（PRD 3.x，用户确认）：
+///  0) 申购费外扣：份额按"净申购金额 = 金额 / (1 + 申购费率)"折算（见 TradeMath），
+///     账户累计本金记实付金额（含费），故买入后市值恒小于本金，差额即申购费。
 ///  1) 登记买入时立即预入账 —— 累加该基金累计本金、扣减当月预算"已投"；
 ///     份额先按"最近可用净值"预占（今晚净值未到，先记 EstimatedShares）。
 ///  2) T 日（买入日）收盘净值盘后到位后，按 T 日净值折算真实份额并校正：
@@ -59,6 +61,9 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
     {
         var now = DateTimeOffset.UtcNow;
 
+        // 申购费率（档案缺失视为无费品种）；份额一律按净申购金额折算
+        var feeRate = fund.BuyFeeRate ?? 0m;
+
         // 已有的 T 日（或最近已于盘中落库的净值日）净值 → 立即确认
         var confirmNav = await db.FundNavs
             .AsNoTracking()
@@ -66,7 +71,7 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
             .OrderBy(n => n.TradeDate)
             .FirstOrDefaultAsync(ct);
 
-        var estimatedShares = TradeMath.EstimateShares(amount, lastNav.UnitNav);
+        var estimatedShares = TradeMath.EstimateShares(amount, lastNav.UnitNav, feeRate);
         decimal? confirmedShares = null;
         decimal? confirmedNav = null;
         TradeStatus status;
@@ -74,7 +79,7 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
         if (confirmNav is not null)
         {
             confirmedNav = confirmNav.UnitNav;
-            confirmedShares = TradeMath.ConfirmShares(amount, confirmNav.UnitNav);
+            confirmedShares = TradeMath.ConfirmShares(amount, confirmNav.UnitNav, feeRate);
             status = TradeStatus.Confirmed;
         }
         else
@@ -143,6 +148,7 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
 
     /// <summary>
     /// 将待确认买入按 T 日净值校正：持有份额 += (真实份额 - 预估份额)，流水转 Confirmed。
+    /// 份额按净申购金额（金额 / (1 + 申购费率)）折算，与登记时预占口径一致。
     /// 应在净值刷新完成后调用（/api/collect/refresh 成功之后）。
     /// </summary>
     public async Task<int> ConfirmPendingAsync(CancellationToken ct)
@@ -155,7 +161,7 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
 
         var confirmedCount = 0;
 
-        // 分组取各基金全部净值（避免逐笔查询）
+        // 分组取各基金全部净值与申购费率（避免逐笔查询）
         var codes = pendings.Select(t => t.FundCode).Distinct().ToList();
         var navsByCode = (await db.FundNavs.AsNoTracking()
                 .Where(n => codes.Contains(n.FundCode))
@@ -163,6 +169,11 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
                 .ToListAsync(ct))
             .GroupBy(n => n.FundCode)
             .ToDictionary(g => g.Key, g => g.OrderBy(n => n.TradeDate).ToList());
+        var feeByCode = (await db.Funds.AsNoTracking()
+                .Where(f => codes.Contains(f.Code))
+                .Select(f => new { f.Code, f.BuyFeeRate })
+                .ToListAsync(ct))
+            .ToDictionary(x => x.Code, x => x.BuyFeeRate ?? 0m);
 
         foreach (var t in pendings)
         {
@@ -178,8 +189,9 @@ public class TradeService(FundDcaDbContext db, ILogger<TradeService> logger)
                 continue;
             }
 
-            var confirmed = TradeMath.ConfirmShares(t.Amount, nav.UnitNav);
-            var delta = TradeMath.ShareCorrection(t.Amount, nav.UnitNav, t.EstimatedShares);
+            var feeRate = feeByCode.TryGetValue(t.FundCode, out var rate) ? rate : 0m;
+            var confirmed = TradeMath.ConfirmShares(t.Amount, nav.UnitNav, feeRate);
+            var delta = TradeMath.ShareCorrection(t.Amount, nav.UnitNav, t.EstimatedShares, feeRate);
 
             var holding = await db.Holdings.FirstOrDefaultAsync(h => h.FundCode == t.FundCode, ct);
             if (holding is null)

@@ -16,9 +16,10 @@ public class ImportReconcilerTests
     private static SystemPosition Sys(
         string code = "110020", string name = "沪深300ETF联接A", FundType type = FundType.Stock,
         int? sector = 1, bool manual = false, decimal shares = 3200m,
-        decimal? cost = 5000m, decimal mv = 5478.40m, decimal? nav = 1.7120m) =>
+        decimal? cost = 5000m, decimal mv = 5478.40m, decimal? nav = 1.7120m,
+        decimal? buyFeeRate = null) =>
         new(code, name, type, sector, sector == 9 ? "债券" : sector == 10 ? "货币" : "大盘",
-            manual, shares, cost, mv, nav);
+            manual, shares, cost, mv, nav, buyFeeRate);
 
     private static ParsedPosition File(
         string? code, string name = "沪深300ETF联接A", decimal? shares = 3200m, decimal? mv = 5478.40m) =>
@@ -48,6 +49,18 @@ public class ImportReconcilerTests
         Assert.Equal(52.50m, one.SuggestedAddedCost);
         Assert.Contains(ReconcileAction.ManualAdd, one.AllowedActions);
         Assert.Contains(ReconcileAction.KeepSystem, one.AllowedActions);
+    }
+
+    [Fact]
+    public void 份额增加_建议加仓本金按实付总额含申购费()
+    {
+        // 系统 2000 份、净值 1.05、申购费率 0.12%；文件 2050 份（+50 份）
+        var sys = Sys(shares: 2000m, nav: 1.05m, mv: 2100m, buyFeeRate: 0.0012m);
+        var items = ImportReconciler.Build([File("110020", shares: 2050m, mv: 2152.50m)], [sys], BondSector, MoneySector);
+        var one = Assert.Single(items);
+        // 50 × 1.05 × 1.0012 = 52.563 → 52.56（投资者实付总额，含申购费；
+        // 旧口径只填净额 52.50 会比实付少一个申购费）
+        Assert.Equal(52.56m, one.SuggestedAddedCost);
     }
 
     [Fact]

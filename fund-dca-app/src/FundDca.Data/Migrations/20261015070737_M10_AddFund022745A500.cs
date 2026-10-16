@@ -21,7 +21,8 @@ namespace FundDca.Data.Migrations
 
             // 新基金档案：博道中证A500指数增强A（022745），2026-10-15 首笔买入。
             // 权益型，归入「成长」赛道（中证A500 为成长型策略定位，用户 2026-10-15 确认）；
-            // 申购费率 0.12%（档案费率仅作展示，份额按成交本金/净值折算，与既有规则一致）。
+            // 申购费率 0.12%：份额按"净申购金额 = 金额 / (1 + 费率)"折算（TradeMath 外扣法），
+            // 账户本金记实付金额，买入后市值小于本金、差额即申购费。
             migrationBuilder.Sql("""
                 INSERT INTO funds (code, name, type, tracked_index_code, sector_id, is_active,
                                    buy_fee_rate, redeem_fee_tiers, dividend_method, use_manual_value)

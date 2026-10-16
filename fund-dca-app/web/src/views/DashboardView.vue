@@ -711,7 +711,7 @@ watch(
       <div class="card k-pnl">
         <div class="label">今日盈亏（股票/QDII）</div>
         <div class="value" :class="pctClass(data.dayPnl)">{{ data.dayPnl >= 0 ? '+' : '' }}¥{{ fmtMoney(data.dayPnl) }}</div>
-        <div class="sub2">货币基金不计；QDII 滞后行不计</div>
+        <div class="sub2">货币基金不计；净值日期未跟上主日期的行不计</div>
       </div>
       <div class="card k-equity">
         <div class="label">权益累计收益</div>
@@ -989,7 +989,7 @@ watch(
             </td>
             <td>
               {{ r.isMoney ? '手工维护' : (r.navDate ?? '—') }}
-              <span v-if="r.stale" class="badge badge-stale">QDII 滞后</span>
+              <span v-if="r.stale" class="badge badge-stale">{{ r.type === 'Qdii' ? 'QDII 滞后' : '净值滞后' }}</span>
             </td>
             <td>{{ r.unitNav != null ? r.unitNav.toFixed(4) : '—' }}</td>
             <td :class="pctClass(r.dayChangePercent)">{{ r.isMoney ? '—' : fmtPct(r.dayChangePercent) }}</td>

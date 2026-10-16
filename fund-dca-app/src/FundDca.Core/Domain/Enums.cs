@@ -11,7 +11,7 @@ public enum FundType
     /// <summary>混合型</summary>
     Mixed = 2,
 
-    /// <summary>QDII 跨境（净值常 T+1/T+2，无盘中代理）</summary>
+    /// <summary>QDII 跨境（无盘中代理；净值披露时点取决于所投市场：投美股常 T+1/T+2，投港股当晚即可）</summary>
     Qdii = 3,
 
     /// <summary>债券型：稳健资产，月底用预算余额一次性申购，不定投</summary>

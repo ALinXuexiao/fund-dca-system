@@ -76,7 +76,13 @@ public record SystemPosition(
     decimal Shares,
     decimal? CostAmount,
     decimal MarketValue,
-    decimal? UnitNav);
+    decimal? UnitNav,
+    /// <summary>
+    /// 申购费率（小数，0.0012 = 0.12%）。用于把"手动加仓"的建议本金还原为
+    /// 投资者实付金额（净额 × (1 + 费率)）；档案缺失按 0 处理。
+    /// 与 TradeMath 的净申购金额口径互为反算，必传以防调用点漏传费率。
+    /// </summary>
+    decimal? BuyFeeRate);
 
 /// <summary>一条对账项（一个基金一行）。</summary>
 public record ReconcileItem(
@@ -98,7 +104,7 @@ public record ReconcileItem(
     ReconcileAction Action,
     /// <summary>份额变动（文件-系统）；新基金即文件份额；红利再投/手动加仓据此入账。</summary>
     decimal SharesDelta,
-    /// <summary>手动加仓默认增加本金 = 份额差 × 最新净值（用户可在提交前修改）。</summary>
+    /// <summary>手动加仓默认增加本金 = 份额差 × 最新净值 × (1 + 申购费率)，即实付总额（用户可在提交前修改）。</summary>
     decimal? SuggestedAddedCost,
     /// <summary>新基金建议类型（用户可在前端改判）。</summary>
     FundType? ProposedType,
@@ -232,8 +238,11 @@ public static class ImportReconciler
             }
             else if (delta > 0)
             {
+                // 手动加仓的建议本金按"投资者实付总额"口径：份额差 × 净值 = 净申购金额，
+                // 再乘 (1 + 申购费率) 还原实付金额 —— 与买入路径 TradeMath.NetBuyAmount 互为反算。
+                // 若只填净额，则记入的本金会比实际付出少一个申购费，收益率被高估。
                 var addedCost = s.UnitNav is { } nav && nav > 0m
-                    ? Math.Round(delta * nav, 2)
+                    ? Math.Round(delta * nav * (1m + Math.Max(0m, s.BuyFeeRate ?? 0m)), 2)
                     : (decimal?)null;
                 items.Add(new ReconcileItem(
                     code, s.Name, fileShares, p.MarketValue, true, s.Name, s.Type, s.SectorId, s.SectorName, false,

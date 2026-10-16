@@ -3,7 +3,8 @@ namespace FundDca.Core.Domain;
 /// <summary>
 /// 基金单位净值历史（盘后正式净值）。
 /// 权益/债券基金由采集任务落盘，越积越厚；货币基金不采集。
-/// QDII 净值常 T+1/T+2 才公布，TradeDate 自然会早一天，看板逐行标注日期。
+/// 不同基金净值披露时点不一：投美股的 QDII 常 T+1/T+2 才公布，投港股或境内的当晚即可，
+/// 故 TradeDate 可能早于看板主日期，看板逐行标注日期。
 /// </summary>
 public class FundNav
 {

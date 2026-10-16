@@ -389,7 +389,7 @@ public class ImportService(
 
             system.Add(new SystemPosition(
                 f.Code, f.Name, f.Type, f.SectorId, f.Sector?.Name, isManual,
-                h?.Shares ?? 0m, h?.CostAmount, marketValue, nav?.UnitNav));
+                h?.Shares ?? 0m, h?.CostAmount, marketValue, nav?.UnitNav, f.BuyFeeRate));
         }
 
         var sectors = (await db.Sectors.AsNoTracking().OrderBy(s => s.SortOrder).ToListAsync(ct))

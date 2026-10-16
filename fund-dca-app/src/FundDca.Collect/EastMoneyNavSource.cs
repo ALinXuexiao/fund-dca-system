@@ -6,7 +6,8 @@ namespace FundDca.Collect;
 /// 天天基金（东方财富）历史净值公开接口。
 /// GET https://api.fund.eastmoney.com/f10/lsjz?fundCode=xxxx&pageIndex=1&pageSize=1
 /// 需要 Referer: https://fundf10.eastmoney.com/，否则返回 403。
-/// 返回最新一个交易日的单位净值、累计净值、日涨跌幅；QDII 最新日期自然晚一天。
+/// 返回最新一个交易日的单位净值、累计净值、日涨跌幅；最新净值日期随基金公司披露进度而异
+/// （投美股的 QDII 常晚一天，投港股或境内的当晚即可），此处照原样采信，不做补正。
 /// </summary>
 public sealed class EastMoneyNavSource(HttpClient http) : INavQuoteSource
 {
