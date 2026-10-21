@@ -85,7 +85,7 @@ const cancelling = ref<number | null>(null)
 
 const SECTOR_COLORS: Record<string, string> = {
   大盘: '#2f6fed', 中盘: '#3aa6e8', 小盘: '#7ed0f5',
-  价值: '#8e5bb5', 成长: '#e8743b', 红利: '#c0392b',
+  价值: '#8e5bb5', 成长: '#e8743b',
   消费: '#d68910', 港股科技: '#6f42c1',
   债券: '#a08a5e', 货币: '#b9b29c',
 }

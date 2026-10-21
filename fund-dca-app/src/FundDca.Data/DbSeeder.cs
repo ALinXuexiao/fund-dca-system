@@ -31,7 +31,6 @@ public static class DbSeeder
             new() { Id = 3, Name = "小盘", LimitPercent = 15m, IsEquity = true, SortOrder = 30 },
             new() { Id = 4, Name = "价值", LimitPercent = 15m, IsEquity = true, SortOrder = 40 },
             new() { Id = 5, Name = "成长", LimitPercent = 15m, IsEquity = true, SortOrder = 50 },
-            new() { Id = 6, Name = "红利", LimitPercent = 15m, IsEquity = true, SortOrder = 60 },
             new() { Id = 7, Name = "消费", LimitPercent = 15m, IsEquity = true, SortOrder = 70 },
             new() { Id = 8, Name = "港股科技", LimitPercent = 15m, IsEquity = true, SortOrder = 80 },
             new() { Id = 11, Name = "医药", LimitPercent = 15m, IsEquity = true, SortOrder = 84 },
@@ -67,7 +66,7 @@ public static class DbSeeder
         {
             New("024393", "永赢恒生消费指数(QDII)A", FundType.Qdii, 7, "HSCGSI"),
             New("022849", "招商中证A50指数增强A", FundType.Stock, 5, "930050"),
-            New("020602", "易方达红利低波ETF联接A", FundType.Stock, 6, "H30269"),
+            New("020602", "易方达红利低波ETF联接A", FundType.Stock, 4, "H30269"),
             New("501060", "中金中证优选300指数(LOF)A", FundType.Stock, 4, "931069"),
             New("028272", "中金中证REITs全收益指数(FOF)A", FundType.Mixed, 13, "932047"),
             New("160218", "国泰国证房地产行业指数(LOF)A", FundType.Stock, 12, "399393"),
