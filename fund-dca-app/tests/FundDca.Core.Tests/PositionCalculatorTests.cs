@@ -19,7 +19,7 @@ public class PositionCalculatorTests
         new("007466", "红利低波ETF联接A", FundType.Stock, 2140.00m, "红利"),
         new("000248", "主要消费ETF联接", FundType.Stock, 6400.00m, "消费"),
         new("161725", "中证白酒指数A", FundType.Stock, 2100.00m, "消费"),
-        new("013402", "恒生科技ETF联接A(QDII)", FundType.Qdii, 2320.00m, "港股科技"),
+        new("013402", "恒生科技ETF联接A(QDII)", FundType.Qdii, 2320.00m, "科技"),
         new("110007", "易方达稳健收益债券A", FundType.Bond, 5000.00m, "债券"),
         new("000198", "天弘余额宝货币", FundType.Money, 6000.00m, "货币"),
     ];
@@ -63,7 +63,7 @@ public class PositionCalculatorTests
         Assert.Equal(13.0412m, s["大盘"].WeightPercent);
         Assert.Equal(8500.00m, s["消费"].MarketValue);
         Assert.Equal(20.2340m, s["消费"].WeightPercent);
-        Assert.Equal(5.5227m, s["港股科技"].WeightPercent);
+        Assert.Equal(5.5227m, s["科技"].WeightPercent);
         Assert.False(s["债券"].IsEquity);
         Assert.False(s["货币"].IsEquity);
     }
@@ -86,7 +86,7 @@ public class PositionCalculatorTests
     {
         Assert.False(PositionCalculator.PassesSectorLimit(15m));
         Assert.True(PositionCalculator.PassesSectorLimit(14.9999m));
-        // 新赛道口径：消费 20.23% 不通过；大盘 13.04%、港股科技 5.52% 通过
+        // 新赛道口径：消费 20.23% 不通过；大盘 13.04%、科技 5.52% 通过
         Assert.False(PositionCalculator.PassesSectorLimit(20.2340m));
         Assert.True(PositionCalculator.PassesSectorLimit(13.0412m));
         Assert.True(PositionCalculator.PassesSectorLimit(5.5227m));

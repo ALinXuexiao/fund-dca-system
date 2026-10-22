@@ -32,7 +32,7 @@ public static class DbSeeder
             new() { Id = 4, Name = "价值", LimitPercent = 15m, IsEquity = true, SortOrder = 40 },
             new() { Id = 5, Name = "成长", LimitPercent = 15m, IsEquity = true, SortOrder = 50 },
             new() { Id = 7, Name = "消费", LimitPercent = 15m, IsEquity = true, SortOrder = 70 },
-            new() { Id = 8, Name = "港股科技", LimitPercent = 15m, IsEquity = true, SortOrder = 80 },
+            new() { Id = 8, Name = "科技", LimitPercent = 15m, IsEquity = true, SortOrder = 80 },
             new() { Id = 11, Name = "医药", LimitPercent = 15m, IsEquity = true, SortOrder = 84 },
             new() { Id = 12, Name = "地产", LimitPercent = 15m, IsEquity = true, SortOrder = 86 },
             new() { Id = 13, Name = "REITs", LimitPercent = 15m, IsEquity = true, SortOrder = 88 },
