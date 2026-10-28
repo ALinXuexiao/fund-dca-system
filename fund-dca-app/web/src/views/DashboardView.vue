@@ -83,11 +83,20 @@ const pendingTrades = ref<PendingTrade[]>([])
 const showPending = ref(false)
 const cancelling = ref<number | null>(null)
 
+// 赛道配色：各赛道取不同色相，相邻扇区不撞色；同族（大盘/科技、债券/货币）靠明度拉开
 const SECTOR_COLORS: Record<string, string> = {
-  大盘: '#2f6fed', 中盘: '#3aa6e8', 小盘: '#7ed0f5',
-  价值: '#8e5bb5', 成长: '#e8743b',
-  消费: '#d68910', 科技: '#6f42c1',
-  债券: '#a08a5e', 货币: '#b9b29c',
+  大盘: '#1e40af', // 深蓝
+  中盘: '#0d9488', // 墨青
+  小盘: '#ca8a04', // 金黄
+  价值: '#7c3aed', // 紫罗兰
+  成长: '#84cc16', // 黄绿
+  消费: '#ea580c', // 橙
+  科技: '#0ea5e9', // 天蓝
+  医药: '#db2777', // 玫红
+  地产: '#92400e', // 砖棕
+  REITs: '#059669', // 翡翠绿
+  债券: '#5b7c99', // 钢蓝灰
+  货币: '#c8b89a', // 暖沙
 }
 
 function showToast(msg: string, err = false) {
