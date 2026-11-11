@@ -19,6 +19,7 @@ namespace FundDca.Api.Services;
 public sealed class IntradayService(
     FundDcaDbContext db,
     EastMoneyIndexQuoteSource source,
+    IndexQuoteFetchState quoteState,
     IMemoryCache cache,
     ILogger<IntradayService> logger)
 {
@@ -177,6 +178,18 @@ public sealed class IntradayService(
             return quotes;
         }
 
+        var now = DateTimeOffset.UtcNow;
+
+        // 退避期内不再打行情源（东财间歇性拒绝时继续 60 秒重试只会加重拒绝），
+        // 沿用上一次成功行情，保证看板不因一次失败整批归零。
+        if (!quoteState.CanAttempt(now))
+        {
+            FillFromLastKnown(misses, quotes);
+            logger.LogInformation(
+                "行情源退避中，跳过本轮取数（{Count} 个指数沿用上次行情）", misses.Count);
+            return quotes;
+        }
+
         try
         {
             var fetched = await source.FetchAsync(misses, ct);
@@ -185,6 +198,7 @@ public sealed class IntradayService(
                 cache.Set(CacheKey(secId), quote, CacheTtl);
                 quotes[secId] = quote;
             }
+            quoteState.OnSuccess(fetched);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -192,12 +206,95 @@ public sealed class IntradayService(
         }
         catch (Exception ex)
         {
-            // 行情拉取失败不阻断看板：相关基金标记为不可估算
-            logger.LogWarning(ex, "指数实时行情拉取失败（{Count} 个指数）", misses.Count);
+            var delay = quoteState.OnFailure(now);
+
+            // 行情拉取失败不阻断看板：相关基金沿用上次成功行情，没有历史的才标记为不可估算
+            FillFromLastKnown(misses, quotes);
+            logger.LogWarning(ex,
+                "指数实时行情拉取失败（{Count} 个指数），退避 {Delay} 秒后再试", misses.Count, delay.TotalSeconds);
         }
 
         return quotes;
     }
 
+    /// <summary>用上一次成功行情补位，避免一次网络失败让整批估算归零。</summary>
+    private void FillFromLastKnown(IEnumerable<string> secIds, Dictionary<string, IndexQuote> quotes)
+    {
+        foreach (var secId in secIds)
+        {
+            if (quotes.ContainsKey(secId))
+            {
+                continue;
+            }
+            if (quoteState.TryGetLast(secId, out var last) && last is not null)
+            {
+                quotes[secId] = last;
+            }
+        }
+    }
+
     private static string CacheKey(string secId) => $"index-quote:{secId}";
+}
+
+/// <summary>
+/// 指数行情取数的退避状态与“上一次成功行情”（单例，跨请求共享）。
+/// 失败后按 60/120/240 秒指数退避，成功即复位；退避期间不请求行情源。
+/// </summary>
+public sealed class IndexQuoteFetchState
+{
+    private static readonly TimeSpan[] Backoff =
+    [
+        TimeSpan.FromSeconds(60),
+        TimeSpan.FromSeconds(120),
+        TimeSpan.FromSeconds(240),
+    ];
+
+    private readonly object _gate = new();
+    private readonly Dictionary<string, IndexQuote> _lastQuotes = new(StringComparer.OrdinalIgnoreCase);
+    private int _failures;
+    private DateTimeOffset _nextAttemptAt = DateTimeOffset.MinValue;
+
+    /// <summary>当前是否允许再请求行情源（退避期外）。</summary>
+    public bool CanAttempt(DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            return now >= _nextAttemptAt;
+        }
+    }
+
+    /// <summary>取某个指数上一次成功的行情。</summary>
+    public bool TryGetLast(string secId, out IndexQuote? quote)
+    {
+        lock (_gate)
+        {
+            return _lastQuotes.TryGetValue(secId, out quote);
+        }
+    }
+
+    /// <summary>成功：复位退避并刷新最近行情。</summary>
+    public void OnSuccess(IReadOnlyDictionary<string, IndexQuote> quotes)
+    {
+        lock (_gate)
+        {
+            _failures = 0;
+            _nextAttemptAt = DateTimeOffset.MinValue;
+            foreach (var (secId, quote) in quotes)
+            {
+                _lastQuotes[secId] = quote;
+            }
+        }
+    }
+
+    /// <summary>失败：按 60→120→240 秒退避，返回本次退避时长。</summary>
+    public TimeSpan OnFailure(DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            var delay = Backoff[Math.Min(_failures, Backoff.Length - 1)];
+            _failures++;
+            _nextAttemptAt = now + delay;
+            return delay;
+        }
+    }
 }

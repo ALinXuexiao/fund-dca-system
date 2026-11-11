@@ -37,7 +37,7 @@ public static class CollectorServiceExtensions
             client.Timeout = TimeSpan.FromSeconds(timeout);
         }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
         {
-            ConnectCallback = ConnectPreferIpv4Async,
+            ConnectCallback = ConnectQuoteAsync,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         });
 
@@ -55,16 +55,24 @@ public static class CollectorServiceExtensions
     }
 
     /// <summary>
-    /// 连接层地址排序：IPv4 优先、IPv6 兜底。Windows/.NET 默认按 DNS 顺序优先连 IPv6，
-    /// 而东财 push2 的 IPv6 边缘会在 HTTP 层直接断连（TCP/TLS 成功、无响应），
-    /// 此时 HttpClient 不会换地址重试，因此在这里把 IPv4 提到前面。
+    /// 连接层地址选择：
+    /// 1) 请求层若通过 <see cref="EastMoneyIndexQuoteSource.PinnedAddress"/> 指定了地址，就只连它
+    ///    （跨地址轮换重试由 EastMoneyIndexQuoteSource 负责，这里不自行换地址）；
+    /// 2) 未指定时退回 IPv4 优先、IPv6 兜底。
+    /// 之所以不在这里做“响应被掐断后再换地址”，是因为连接层拿不到“响应中途失败”的信号，
+    /// 只有请求层能拿到 HttpIOException(ResponseEnded) 并重试。
     /// </summary>
-    private static async ValueTask<Stream> ConnectPreferIpv4Async(
+    private static async ValueTask<Stream> ConnectQuoteAsync(
         SocketsHttpConnectionContext context, CancellationToken ct)
     {
         var host = context.DnsEndPoint.Host;
         IPAddress[] addresses;
-        if (IPAddress.TryParse(host, out var literal))
+        if (context.InitialRequestMessage.Options.TryGetValue(
+                EastMoneyIndexQuoteSource.PinnedAddress, out var pinned) && pinned is not null)
+        {
+            addresses = [pinned];
+        }
+        else if (IPAddress.TryParse(host, out var literal))
         {
             addresses = [literal];
         }

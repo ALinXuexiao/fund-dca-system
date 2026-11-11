@@ -278,19 +278,42 @@ async function loadIntraday(silent = false) {
   }
 }
 
-/** 开启盘中估算：立即拉取一次并启动 60 秒轮询 */
+/** 开启盘中估算：立即拉取一次并启动 60 秒轮询（页面隐藏时不建轮询） */
 async function startIntraday() {
   intradayOn.value = true
   await loadIntraday()
+  if (document.visibilityState === 'visible') startIntradayTimer()
+}
+
+function startIntradayTimer() {
+  if (intradayTimer !== undefined) return
   intradayTimer = window.setInterval(() => void loadIntraday(true), INTRADAY_REFRESH_MS)
+}
+
+function stopIntradayTimer() {
+  window.clearInterval(intradayTimer)
+  intradayTimer = undefined
+}
+
+/**
+ * 页面隐藏（切标签/最小化）时暂停盘中轮询，回前台立即补一次再恢复。
+ * 这样后台标签页不会再每 60 秒打一次行情接口，配合页面心跳实现「没人看就收工」。
+ */
+function onVisibilityChange() {
+  if (!intradayOn.value) return
+  if (document.visibilityState === 'visible') {
+    void loadIntraday(true)
+    startIntradayTimer()
+    return
+  }
+  stopIntradayTimer()
 }
 
 async function toggleIntraday() {
   if (intradayOn.value) {
     intradayOn.value = false
     intraday.value = null
-    window.clearInterval(intradayTimer)
-    intradayTimer = undefined
+    stopIntradayTimer()
     return
   }
   await startIntraday()
@@ -636,10 +659,12 @@ async function bootstrap() {
 
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  document.addEventListener('visibilitychange', onVisibilityChange)
   void bootstrap()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   window.clearInterval(intradayTimer)
   window.clearTimeout(backendRetryTimer)
   donutChart?.dispose()

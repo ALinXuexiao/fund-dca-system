@@ -47,6 +47,13 @@ builder.Services.AddDbContext<FundDcaDbContext>((sp, o) => o
 // 天天基金净值采集（5 次静默重试，间隔由 appsettings 配置）与看板聚合
 builder.Services.AddFundDcaCollector(builder.Configuration);
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IndexQuoteFetchState>();
+
+// 无人值守自退出：心跳接口只记时间戳，看门狗在长时间无心跳时优雅停止主机。
+// 默认关闭（appsettings），启动入口用环境变量 HostLifetime__ExitWithoutHeartbeat=true 开启。
+builder.Services.Configure<HostLifetimeOptions>(builder.Configuration.GetSection(HostLifetimeOptions.SectionName));
+builder.Services.AddSingleton<HostHeartbeatMonitor>();
+builder.Services.AddHostedService<HostExitWatchdog>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<IntradayService>();
 builder.Services.AddScoped<DecisionService>();

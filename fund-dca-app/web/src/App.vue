@@ -56,6 +56,22 @@ async function refreshHealth() {
   health.value = (await checkHealth()) ? 'ok' : 'down'
 }
 
+/**
+ * 页面隐藏（切标签/最小化）时停掉 5 秒一次的健康轮询，回到前台立即补查一次。
+ * 与心跳、盘中估算保持一致：后台标签页不再产生任何周期请求。
+ */
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    void refreshHealth()
+    if (healthTimer === undefined) {
+      healthTimer = window.setInterval(() => void refreshHealth(), 5000)
+    }
+    return
+  }
+  window.clearInterval(healthTimer)
+  healthTimer = undefined
+}
+
 onMounted(async () => {
   tick()
   clockTimer = window.setInterval(tick, 1000)
@@ -66,11 +82,13 @@ onMounted(async () => {
   // 用户不会在不知情时点按钮、只看到一句英文的 "Failed to fetch"。
   await refreshHealth()
   healthTimer = window.setInterval(() => void refreshHealth(), 5000)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onBeforeUnmount(() => {
   window.clearInterval(clockTimer)
   window.clearInterval(healthTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

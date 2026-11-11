@@ -8,9 +8,11 @@
          它们的输出重定向到 logs\backend*.log / logs\frontend*.log。
       2. 只等「前端开发服务器」就绪就立刻打开浏览器，不再等后端编译 + 连云端库。
          页面会先渲染骨架屏，等后端起来后自动填入数据（见 web\src 的 waitForBackend）。
+      3. 本入口开启「无人值守自退出」：页面关闭后约 90 秒后端自动优雅退出；
+         后端一退出，本脚本立即把前端开发服务器一并收掉，不留孤儿进程。
 
     参数：
-      -NoBrowser              不打开浏览器（自测用）
+      -NoBrowser              不打开浏览器（自测用；同时不开启自退出，避免服务自己退出）
       -Restart                先停止已运行的前后端，再重新启动
       -FrontendTimeoutSeconds 等待前端就绪的秒数，默认 90
 #>
@@ -158,14 +160,22 @@ try {
 
     Write-LauncherLog ('开始启动：appRoot={0}' -f $appRoot)
 
+    # 无人值守自退出开关：只有本启动入口开启，手工 dotnet run / 后端.bat 不受影响。
+    # -NoBrowser 是自测场景（不会打开页面），同样关闭，否则 90 秒后服务自己就退了。
+    $autoExit = -not $NoBrowser
+    $env:HostLifetime__ExitWithoutHeartbeat = if ($autoExit) { 'true' } else { 'false' }
+    Write-LauncherLog ('无人值守自退出：{0}' -f $(if ($autoExit) { '开启（90 秒无页面心跳即退出）' } else { '关闭（-NoBrowser 自测）' }))
+
+    $startedBackendPid = 0
+
     # ---------- 后端（编译 + 连云端库较慢，放后台跑，不阻塞浏览器打开） ----------
     if (Test-BackendOpen) {
         Write-LauncherLog '后端已在运行（端口 5000 已监听），跳过启动'
     } elseif (Test-RecordedAlive $backendPid) {
         Write-LauncherLog '后端进程仍在启动中（PID 存活但端口未就绪），跳过启动'
     } else {
-        $bpid = Start-HiddenService (Join-Path $scriptDir 'run-backend.cmd') $backendOut $backendErr $backendPid
-        Write-LauncherLog ('后端已后台启动（cmd PID={0}），日志 -> logs\backend.log' -f $bpid)
+        $startedBackendPid = Start-HiddenService (Join-Path $scriptDir 'run-backend.cmd') $backendOut $backendErr $backendPid
+        Write-LauncherLog ('后端已后台启动（cmd PID={0}），日志 -> logs\backend.log' -f $startedBackendPid)
     }
 
     # ---------- 前端 ----------
@@ -208,6 +218,24 @@ try {
         Write-LauncherLog ('前端在 {0} 秒内未就绪，放弃等待' -f $FrontendTimeoutSeconds)
         if ($tail) { Write-LauncherLog ('frontend.err.log 末尾：' + $tail) }
         Show-ErrorMessage ("前端开发服务器（Vite）未能在 {0} 秒内就绪。`n`n请查看日志：`n  {1}`n  {2}`n`n常见原因：web 目录尚未执行 npm install，或端口 5173 被占用。" -f $FrontendTimeoutSeconds, $frontendErr, $frontendOut)
+    }
+
+    # ---------- 守护：后端退出后收掉前端（关页面即收工） ----------
+    # 后端在 90 秒无页面心跳时优雅退出；本脚本随即按端口结束前端开发服务器，
+    # 避免留下没人用的 Vite 进程。后端不是本次启动的（例如手工 dotnet run）时不接管，
+    # 以免把用户自己管理的进程杀掉。
+    # 启动动作到此已完成，先释放启动锁：守护期间再次双击入口不应被当成重复启动。
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+    if ($autoExit -and $startedBackendPid -gt 0) {
+        Write-LauncherLog ('进入守护模式：后端进程 {0} 退出后将自动关闭前端' -f $startedBackendPid)
+        try {
+            Wait-Process -Id $startedBackendPid -ErrorAction SilentlyContinue
+        } catch { }
+        Write-LauncherLog '后端已退出，开始关闭前端服务'
+        & (Join-Path $scriptDir 'stop-app.ps1') -Quiet
+        Write-LauncherLog '前端已关闭，守护结束'
+    } elseif ($autoExit) {
+        Write-LauncherLog '后端不是本次启动的，跳过守护（关闭页面后需手动停止该后端）'
     }
 } finally {
     Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
