@@ -19,16 +19,29 @@ public sealed class HostLifetimeOptions
 
     /// <summary>看门狗检查间隔秒数。默认 5 秒，即实际退出时刻最多比阈值晚 5 秒。</summary>
     public int CheckIntervalSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// 页面存活长连接（SSE）的推送间隔秒数。默认 10 秒。
+    /// 必须显著小于 HeartbeatTimeoutSeconds：后台标签页的定时器会被浏览器节流到约 60 秒，
+    /// 只有这条与可见性无关的网络连接能稳定证明「页面还开着」。
+    /// </summary>
+    public int WatchPingSeconds { get; set; } = 10;
 }
 
 /// <summary>
-/// 记录浏览器页面最后一次心跳。心跳接口只写这个内存时间戳，不查库、不访问外部行情，
-/// 因此成本接近零；看门狗只读它判断「还有没有人在看页面」。
+/// 记录浏览器页面最后一次「还活着」的信号。有两种来源，都只写这个内存时间戳，
+/// 不查库、不访问外部行情：
+///   ① 可见页面的 POST 心跳（30 秒一次）；
+///   ② 页面存活长连接（SSE）每 10 秒一次的推送——后台标签页的定时器会被浏览器
+///      节流到约 60 秒，靠定时器不足以保证 90 秒阈值，而长连接不受可见性影响。
+/// 看门狗只读它判断「还有没有人在看页面」。
 /// </summary>
 public sealed class HostHeartbeatMonitor
 {
     private long _lastBeatTicks = DateTime.UtcNow.Ticks;
     private long _beatCount;
+    private long _streamCount;
+    private long _activeStreams;
 
     /// <summary>最后一次心跳（UTC）。</summary>
     public DateTime LastBeatUtc => new(Interlocked.Read(ref _lastBeatTicks), DateTimeKind.Utc);
@@ -39,10 +52,27 @@ public sealed class HostHeartbeatMonitor
     /// <summary>累计收到的心跳次数，仅用于诊断接口确认「心跳确实在发」。</summary>
     public long BeatCount => Interlocked.Read(ref _beatCount);
 
+    /// <summary>当前打开的页面存活长连接数（诊断用）。</summary>
+    public long ActiveStreams => Interlocked.Read(ref _activeStreams);
+
+    /// <summary>累计建立过多少条页面存活长连接（诊断用）。</summary>
+    public long StreamCount => Interlocked.Read(ref _streamCount);
+
     public void Record()
     {
         Interlocked.Exchange(ref _lastBeatTicks, DateTime.UtcNow.Ticks);
         Interlocked.Increment(ref _beatCount);
+    }
+
+    public void StreamOpened()
+    {
+        Interlocked.Increment(ref _streamCount);
+        Interlocked.Increment(ref _activeStreams);
+    }
+
+    public void StreamClosed()
+    {
+        Interlocked.Decrement(ref _activeStreams);
     }
 }
 
