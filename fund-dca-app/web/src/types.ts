@@ -84,24 +84,35 @@ export interface IntradayRow {
   indexName: string | null
   /** 是否用档案配置的代理指数代为估算 */
   viaProxy: boolean
-  /** 指数盘中涨跌幅 % */
+  /** 指数盘中涨跌幅 %；未确认行按它估算，已确认行为 null */
   indexChangePercent: number | null
+  /** 基金自身当日净值涨跌幅 %；仅当日净值已确认的行有值 */
+  navChangePercent: number | null
   lastNav: number | null
   lastNavDate: string | null
-  /** 估算盘中净值 */
+  /** 估算盘中净值（仅未确认行） */
   estimatedNav: number | null
   estimatedMarketValue: number | null
-  /** 估算今日盈亏额 */
+  /** 估算今日盈亏额（仅未确认行） */
   estimatedDayPnl: number | null
+  /** 真实当日盈亏额（仅已确认行） */
+  confirmedDayPnl: number | null
   /** 不可估算原因；可估算时为空 */
   reason: string | null
 }
 
 export interface Intraday {
+  /** 今天是否为交易日（仅按周末判断，不含法定节假日）；false 时后端不取行情、不做估算 */
+  isTradingDay: boolean
   quotedAt: string | null
   /** 行情超过 5 分钟未更新（休市/午休/数据源异常） */
   quoteStale: boolean
+  /** 按指数行情估算的只数 */
   coveredCount: number
+  /** 按当日已确认净值计入的只数 */
+  confirmedCount: number
+  /** 当日盈亏合计（已确认真实 + 未确认估算） */
+  dayPnlTotal: number
   unavailableCount: number
   rows: IntradayRow[]
 }

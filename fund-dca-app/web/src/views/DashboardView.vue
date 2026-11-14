@@ -332,10 +332,34 @@ function est(row: DashboardRow): IntradayRow | null {
   return intradayByCode.value.get(row.code) ?? null
 }
 
-/** 盘中估算今日盈亏：仅累加可估算的行 */
-const estDayPnl = computed(() =>
-  (intraday.value?.rows ?? []).reduce((s, r) => s + (r.estimatedDayPnl ?? 0), 0),
+/** 当日盈亏合计（统一口径）：已确认行取真实净值涨跌，未确认行取指数估算 */
+const estDayPnl = computed(() => intraday.value?.dayPnlTotal ?? 0)
+
+/**
+ * 交易日且当日净值已全部入库：每行都按真实净值涨跌算，
+ * 这是正常状态（当日涨跌已在净值里，无需再估算），不是行情故障。
+ */
+const intradayNavConfirmed = computed(() => {
+  const i = intraday.value
+  return i?.isTradingDay === true && i.coveredCount === 0 && i.confirmedCount > 0
+})
+
+/** 混合态：一部分基金当日净值已入库（真实值），另一部分只能按指数行情估算 */
+const intradayMixed = computed(() => {
+  const i = intraday.value
+  return i?.isTradingDay === true && i.coveredCount > 0 && i.confirmedCount > 0
+})
+
+/** 没有可展示的合计（周末或当日净值已全部确认） */
+const intradayNoEstimate = computed(() =>
+  intraday.value ? !intraday.value.isTradingDay || intradayNavConfirmed.value : false,
 )
+
+/** 合计标签：混合态必须说明口径，不能叫「盘中估算」 */
+const pnlLabel = computed(() => {
+  if (!intraday.value) return '盘中估算今日盈亏'
+  return intradayMixed.value ? '今日盈亏（已确认+估算）' : '盘中估算今日盈亏'
+})
 
 /** 全仓估算市值：可估算的用估算值，其余（债券/货币/无跟踪指数）沿用盘后市值 */
 const estMarketValue = computed(() => {
@@ -350,6 +374,11 @@ function hasEst(row: DashboardRow): boolean {
   return est(row)?.estimatedNav != null
 }
 
+/** 当日净值已确认，按真实净值涨跌计入合计 */
+function hasConfirmed(row: DashboardRow): boolean {
+  return est(row)?.confirmedDayPnl != null
+}
+
 function estPct(row: DashboardRow): number | null {
   return est(row)?.indexChangePercent ?? null
 }
@@ -359,14 +388,26 @@ function estNavText(row: DashboardRow): string {
   return e?.estimatedNav != null ? e.estimatedNav.toFixed(4) : '—'
 }
 
-/** 明细列悬浮说明：用了哪个指数、是否代理、基准净值日期 */
+/** 已确认行的真实当日盈亏，带正负号 */
+function confirmedPnlText(row: DashboardRow): string {
+  const v = est(row)?.confirmedDayPnl
+  if (v == null) return '—'
+  return `${v >= 0 ? '+' : '-'}¥${fmtMoney(Math.abs(v))}`
+}
+
+/** 明细列悬浮说明：区分真实净值与指数推算两种来源 */
 function estTitle(row: DashboardRow): string {
   const e = est(row)
-  if (!e) return ''
+  if (!e) {
+    return intraday.value && !intraday.value.isTradingDay ? '非交易日（周末），不做盘中估算' : ''
+  }
   if (e.reason) return `不可估算：${e.reason}`
+  if (e.confirmedDayPnl != null) {
+    return `当日净值已确认（${e.lastNavDate ?? '—'}），按基金自身净值涨跌幅 ${fmtPct(e.navChangePercent)} 计算真实当日盈亏，已计入合计`
+  }
   const label = `${e.indexName ?? ''}${e.indexCode ? `（${e.indexCode}）` : ''}`
   const via = e.viaProxy ? '代理指数：本基金跟踪指数东财无行情，改用档案代理指数推算 ' : '跟踪指数 '
-  return `${via}${label} ${fmtPct(e.indexChangePercent)} · 基准净值 ${e.lastNavDate ?? '—'}`
+  return `${via}${label} ${fmtPct(e.indexChangePercent)} · 基准净值 ${e.lastNavDate ?? '—'}（指数推算，已计入合计）`
 }
 
 /** 用代理指数推算的基金数：这些行的估算误差可能较大，需在卡片条上显式提示 */
@@ -788,28 +829,41 @@ watch(
       </div>
     </div>
 
-    <!-- 盘中估算条：跟踪指数实时涨跌幅 × 最新确认净值，非实际净值 -->
-    <div v-if="intradayOn && intraday" class="intraday-bar" :class="{ stale: intraday.quoteStale }">
+    <!-- 盘中估算条：已确认行取真实净值涨跌，未确认行按跟踪指数行情推算 -->
+    <div v-if="intradayOn && intraday" class="intraday-bar" :class="{ stale: !intradayNoEstimate && intraday.quoteStale }">
       <div class="ib-item">
-        <div class="label">盘中估算今日盈亏</div>
-        <div class="value" :class="pctClass(estDayPnl)">{{ estDayPnl >= 0 ? '+' : '' }}¥{{ fmtMoney(estDayPnl) }}</div>
+        <div class="label">{{ pnlLabel }}</div>
+        <div v-if="!intradayNoEstimate" class="value" :class="pctClass(estDayPnl)">{{ estDayPnl >= 0 ? '+' : '' }}¥{{ fmtMoney(estDayPnl) }}</div>
+        <div v-else class="value">—</div>
       </div>
       <div class="ib-item">
-        <div class="label">全仓估算市值</div>
+        <div class="label">{{ intradayNoEstimate ? '全仓市值（按已确认净值）' : '全仓估算市值' }}</div>
         <div class="value">¥{{ fmtMoney(estMarketValue) }}</div>
       </div>
       <div class="ib-meta">
-        <div>
-          指数行情：<b>{{ intraday.quotedAt ?? '—' }}</b>
-          <span v-if="intraday.quoteStale" class="badge badge-stale">行情未更新（休市/午休或数据源异常）</span>
+        <div v-if="!intraday.isTradingDay">
+          <span class="badge">非交易日（周末），不提供盘中估算</span>
         </div>
-        <div>可估算 {{ intraday.coveredCount }} 只 · 不可估算 {{ intraday.unavailableCount }} 只（见明细「盘中估算」列悬浮说明）</div>
+        <div v-else-if="intradayNavConfirmed">
+          <span class="badge">当日净值已确认，无需盘中估算</span>
+        </div>
+        <template v-else>
+          <div>
+            指数行情：<b>{{ intraday.quotedAt ?? '—' }}</b>
+            <span v-if="intraday.quoteStale" class="badge badge-stale">行情未更新（休市/午休或数据源异常）</span>
+          </div>
+          <div v-if="intradayMixed">
+            含 {{ intraday.confirmedCount }} 只按已确认净值（真实值）、{{ intraday.coveredCount }} 只按指数估算
+            <template v-if="intraday.unavailableCount > 0">，另有 {{ intraday.unavailableCount }} 只无法估算</template>
+          </div>
+          <div v-else>可估算 {{ intraday.coveredCount }} 只 · 不可估算 {{ intraday.unavailableCount }} 只（见明细「盘中估算」列悬浮说明）</div>
+        </template>
         <div v-if="proxyCount > 0" class="warn-line">
           其中 {{ proxyCount }} 只用的是档案里的代理指数（本基金跟踪指数东财无行情），误差可能较大，请以实际净值为准
         </div>
         <div class="disc">
-          口径：跟踪指数实时涨跌幅 × 最新确认净值推算，非实际净值。指数基金贴合度高；指数增强/联接有跟踪误差，
-          QDII 叠加汇率与净值滞后，仅供参考，实际以基金公司披露净值为准。
+          口径：当日净值已确认的基金按基金自身净值涨跌幅计入（真实值）；其余按跟踪指数实时涨跌幅 × 最新确认净值推算。
+          指数推算部分受跟踪误差、QDII 汇率与净值滞后影响，仅供参考，实际以基金公司披露净值为准。
         </div>
       </div>
     </div>
@@ -1006,7 +1060,7 @@ watch(
             <th>净值日期</th>
             <th>单位净值</th>
             <th>日涨跌</th>
-            <th>盘中估算<span class="th-sub">指数推算</span></th>
+            <th>盘中估算<span class="th-sub">已确认=真实净值</span></th>
             <th>份额</th>
             <th>当前市值</th>
             <th>占比</th>
@@ -1030,7 +1084,13 @@ watch(
             <td :title="estTitle(r)">
               <template v-if="hasEst(r)">
                 <span :class="pctClass(estPct(r))">{{ fmtPct(estPct(r)) }}</span>
-                <div class="est-nav">{{ estNavText(r) }}</div>
+                <div class="est-nav">{{ estNavText(r) }}<span class="src-tag">指数估算</span></div>
+              </template>
+              <template v-else-if="hasConfirmed(r)">
+                <span :class="pctClass(est(r)?.confirmedDayPnl)">{{ confirmedPnlText(r) }}</span>
+                <div class="est-nav">
+                  净值 <span :class="pctClass(est(r)?.navChangePercent)">{{ fmtPct(est(r)?.navChangePercent ?? null) }}</span><span class="src-tag confirmed">已确认</span>
+                </div>
               </template>
               <span v-else style="color:var(--muted)">{{ intradayOn ? '—' : '' }}</span>
             </td>
@@ -1267,5 +1327,21 @@ tr.rowzero td { opacity: .62; }
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   margin-top: 2px;
+}
+
+/* 来源标注：指数估算 / 已确认真实净值，视觉上区分两种口径 */
+.src-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 15px;
+  background: #eef2f7;
+  color: var(--muted);
+}
+.src-tag.confirmed {
+  background: #e7f6ec;
+  color: #1a7f37;
 }
 </style>

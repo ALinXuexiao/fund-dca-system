@@ -1,6 +1,7 @@
 using FundDca.Api.Models;
 using FundDca.Collect;
 using FundDca.Core.Domain;
+using FundDca.Core.Rules;
 using FundDca.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -31,6 +32,22 @@ public sealed class IntradayService(
 
     public async Task<IntradayDto> BuildAsync(CancellationToken ct)
     {
+        // 周末：行情源不产生新数据，取到的只是上一交易日收盘快照，按「今日」展示会误导
+        // （且会把那个涨跌幅重复乘到已确认的净值上）。直接返回非交易日，不连数据库、不请求行情源。
+        if (IntradayEstimate.IsWeekend(DateTimeOffset.Now))
+        {
+            logger.LogInformation("非交易日（周末），跳过盘中估算，不请求行情源");
+            return new IntradayDto
+            {
+                IsTradingDay = false,
+                // 非交易日不属于「行情未更新」故障，故不走 5 分钟判据
+                QuoteStale = false,
+                CoveredCount = 0,
+                UnavailableCount = 0,
+                Rows = [],
+            };
+        }
+
         // 只估算有跟踪指数、非手工市值、非货币的启用基金
         var funds = await db.Funds.AsNoTracking()
             .Where(f => f.IsActive && !f.UseManualValue && f.Type != FundType.Money && f.TrackedIndexCode != null)
@@ -79,6 +96,7 @@ public sealed class IntradayService(
 
         var rows = new List<IntradayRowDto>();
         var covered = 0;
+        var confirmed = 0;
         DateTimeOffset? quotedAt = null;
 
         foreach (var f in funds)
@@ -101,25 +119,50 @@ public sealed class IntradayService(
             holdings.TryGetValue(f.Code, out var holding);
             latestNavs.TryGetValue(f.Code, out var nav);
 
+            // 行情缺失时退化为「今天」：此时若当日净值已入库，仍然可以用真实净值涨跌算当日盈亏
+            var quoteDate = quote is null
+                ? DateOnly.FromDateTime(DateTimeOffset.Now.ToOffset(IntradayEstimate.MarketOffset).DateTime)
+                : IntradayEstimate.QuoteTradeDate(quote.QuotedAt);
+
+            // 净值已覆盖行情交易日 = 当日涨跌已计入净值：不能再乘指数涨跌幅，
+            // 改用基金自身净值涨跌幅算真实当日盈亏（口径与看板 dayPnl 一致）。
+            var navCovered = nav is not null && IntradayEstimate.NavCoversQuote(nav.TradeDate, quoteDate);
+
             var reason = holding is null || holding.Shares <= 0m ? "无持仓"
                 : nav is null ? "无净值"
-                : quote is null ? (ownSecId is null && proxySecId is null ? "该指数无实时行情" : "指数行情未取到")
-                : null;
+                : navCovered
+                    ? (nav.DayChangePercent is null ? $"当日净值已确认（{nav.TradeDate:yyyy-MM-dd}），缺少当日涨跌幅" : null)
+                    : quote is null ? (ownSecId is null && proxySecId is null ? "该指数无实时行情" : "指数行情未取到")
+                    : null;
+
+            // 行情时间与是否估算无关：只要取到了行情就记录下来，
+            // 让「指数行情」列展示真实取数时间，5 分钟未更新判据照旧按它计算。
+            if (quote is not null && (quotedAt is null || quote.QuotedAt > quotedAt))
+            {
+                quotedAt = quote.QuotedAt;
+            }
 
             decimal? estNav = null;
             decimal? estMarketValue = null;
             decimal? estDayPnl = null;
+            decimal? navChangePercent = null;
+            decimal? confirmedDayPnl = null;
 
             if (reason is null)
             {
-                var est = nav!.UnitNav * (1m + quote!.ChangePercent / 100m);
-                estNav = Math.Round(est, 4);
-                estMarketValue = Math.Round(holding!.Shares * estNav.Value, 2);
-                estDayPnl = Math.Round(holding.Shares * (estNav.Value - nav.UnitNav), 2);
-                covered++;
-                if (quotedAt is null || quote.QuotedAt > quotedAt)
+                if (navCovered)
                 {
-                    quotedAt = quote.QuotedAt;
+                    navChangePercent = nav!.DayChangePercent;
+                    confirmedDayPnl = IntradayEstimate.ConfirmedDayPnl(
+                        holding!.Shares, nav.UnitNav, nav.DayChangePercent!.Value);
+                    confirmed++;
+                }
+                else
+                {
+                    estNav = IntradayEstimate.EstimatedNav(nav!.UnitNav, quote!.ChangePercent);
+                    estMarketValue = IntradayEstimate.EstimatedMarketValue(holding!.Shares, estNav.Value);
+                    estDayPnl = IntradayEstimate.EstimatedDayPnl(holding.Shares, estNav.Value, nav.UnitNav);
+                    covered++;
                 }
             }
 
@@ -129,12 +172,14 @@ public sealed class IntradayService(
                 IndexCode = code,
                 IndexName = indexName,
                 ViaProxy = viaProxy,
-                IndexChangePercent = reason is null ? quote!.ChangePercent : null,
+                IndexChangePercent = estNav is not null ? quote!.ChangePercent : null,
+                NavChangePercent = navChangePercent,
                 LastNav = nav?.UnitNav,
                 LastNavDate = nav?.TradeDate.ToString("yyyy-MM-dd"),
                 EstimatedNav = estNav,
                 EstimatedMarketValue = estMarketValue,
                 EstimatedDayPnl = estDayPnl,
+                ConfirmedDayPnl = confirmedDayPnl,
                 Reason = reason,
             });
         }
@@ -144,12 +189,16 @@ public sealed class IntradayService(
             QuotedAt = quotedAt?.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss"),
             QuoteStale = quotedAt is null || DateTimeOffset.UtcNow - quotedAt > StaleAfter,
             CoveredCount = covered,
-            UnavailableCount = rows.Count - covered,
+            ConfirmedCount = confirmed,
+            DayPnlTotal = IntradayEstimate.TotalDayPnl(
+                rows.Select(r => (r.ConfirmedDayPnl, r.EstimatedDayPnl))),
+            UnavailableCount = rows.Count - covered - confirmed,
             Rows = rows,
         };
 
-        logger.LogInformation("盘中估算完成：可估算 {Ok} 只，不可估算 {Fail} 只（行情 {At}）",
-            dto.CoveredCount, dto.UnavailableCount, dto.QuotedAt ?? "无");
+        logger.LogInformation(
+            "盘中估算完成：指数估算 {Ok} 只，净值已确认 {Confirmed} 只，不可估算 {Fail} 只（行情 {At}）",
+            dto.CoveredCount, dto.ConfirmedCount, dto.UnavailableCount, dto.QuotedAt ?? "无");
 
         return dto;
     }
