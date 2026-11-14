@@ -15,9 +15,15 @@
 
 const HEARTBEAT_INTERVAL_MS = 30_000
 const WATCH_URL = '/api/system/host/watch'
+// 重建退避：3s → 6s → 12s → 30s（上限）。后端就绪后最多 30 秒内一定能连上。
+const WATCH_RETRY_START_MS = 3_000
+const WATCH_RETRY_MAX_MS = 30_000
 
 let timer: number | undefined
 let watch: EventSource | undefined
+let retryTimer: number | undefined
+let retryDelay = WATCH_RETRY_START_MS
+let stopped = false
 
 function send(): void {
   // 心跳失败无需打扰用户：后端未就绪/正在退出时静默忽略。
@@ -37,20 +43,66 @@ function stopBeat(): void {
   timer = undefined
 }
 
-/** 打开（或复用）页面存活长连接。断开由浏览器自动重连，这里不主动干预。 */
+/**
+ * 打开（或重建）页面存活长连接。
+ *
+ * 必须自己处理「永久失败」：启动入口只等前端就绪就打开浏览器，此时后端往往还没起来，
+ * Vite 代理会回 503；EventSource 按规范会 fail the connection（readyState=CLOSED）
+ * 并且**不再重试**，只看对象是否存在会误以为连接还在，后台保活就彻底失效。
+ * 因此这里判断 readyState：已关闭就丢弃并按退避重建。
+ */
 function openWatch(): void {
-  if (watch !== undefined) return
-  watch = new EventSource(WATCH_URL)
+  if (stopped) return
+  if (watch !== undefined && watch.readyState !== EventSource.CLOSED) return
+  watch?.close()
+  watch = undefined
+
+  const es = new EventSource(WATCH_URL)
+  watch = es
+  es.addEventListener('open', () => {
+    // 连上了：退避重置，下次断线能快速恢复
+    retryDelay = WATCH_RETRY_START_MS
+    if (retryTimer !== undefined) {
+      window.clearTimeout(retryTimer)
+      retryTimer = undefined
+    }
+  })
+  es.addEventListener('error', () => {
+    // 断网等可恢复情况浏览器会自己重连（readyState=CONNECTING），这里不插手；
+    // 只有已被判定永久失败（CLOSED）才由我们退避重建。
+    if (es.readyState !== EventSource.CLOSED) return
+    if (watch === es) watch = undefined
+    es.close()
+    scheduleRetry()
+  })
 }
 
-/** 关闭长连接：只在页面真正卸载时调用，之后后端才能按超时回收。 */
+function scheduleRetry(): void {
+  if (stopped || retryTimer !== undefined) return
+  const delay = retryDelay
+  retryDelay = Math.min(retryDelay * 2, WATCH_RETRY_MAX_MS)
+  retryTimer = window.setTimeout(() => {
+    retryTimer = undefined
+    openWatch()
+  }, delay)
+}
+
+/** 关闭长连接并停止重建：只在页面真正卸载时调用，之后后端才能按超时回收。 */
 function closeWatch(): void {
-  if (watch === undefined) return
-  watch.close()
-  watch = undefined
+  stopped = true
+  if (retryTimer !== undefined) {
+    window.clearTimeout(retryTimer)
+    retryTimer = undefined
+  }
+  if (watch !== undefined) {
+    watch.close()
+    watch = undefined
+  }
 }
 
 function syncWithVisibility(): void {
+  // 页面还在（含从 bfcache 恢复），允许重建长连接
+  stopped = false
   // 长连接任何时候都要在：它才是「页面还活着」的可靠信号
   openWatch()
   if (document.visibilityState === 'visible') {
