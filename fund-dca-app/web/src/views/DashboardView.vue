@@ -67,8 +67,9 @@ const draftValue = ref('')
 
 // 预算内联编辑
 const editingBudget = ref(false)
-const draftBudget = ref('')
-const draftInvested = ref('')
+// number 输入框的 v-model 会把值转成 number，草稿不能假设是字符串
+const draftBudget = ref<string | number>('')
+const draftInvested = ref<string | number>('')
 
 // 单次定投固定金额（全局设置，内联编辑）
 const editingFixed = ref(false)
@@ -422,11 +423,12 @@ function startBudgetEdit() {
 }
 
 async function saveBudget() {
-  if (draftBudget.value.trim() === '') {
+  const rawBudget = String(draftBudget.value ?? '').trim()
+  if (rawBudget === '') {
     showToast('请填写当月预算额', true)
     return
   }
-  const budget = Number(draftBudget.value)
+  const budget = Number(rawBudget)
   const invested = Number(draftInvested.value)
   if (!Number.isFinite(budget) || !Number.isFinite(invested) || budget < 0 || invested < 0 || invested > budget) {
     showToast('预算不能为负，且已投额不能超过预算额', true)
@@ -435,8 +437,12 @@ async function saveBudget() {
   try {
     await updateBudget(budget, invested)
     editingBudget.value = false
-    await load(true)
-    showToast('当月预算已更新，建议金额已重算')
+    // load 失败时不会抛异常（内部吞掉并返回 false），不能一律报成功
+    if (await load(true)) {
+      showToast('当月预算已更新，建议金额已重算')
+    } else {
+      showToast('预算已保存，但看板刷新失败，请手动刷新页面', true)
+    }
   } catch (e) {
     showToast((e as Error).message, true)
   }
