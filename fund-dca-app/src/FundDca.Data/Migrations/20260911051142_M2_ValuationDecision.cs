@@ -82,68 +82,8 @@ namespace FundDca.Data.Migrations
                 table: "index_valuations",
                 column: "trade_date");
 
-            // ---------- M2 数据修正（幂等；对老库补数据，对全新库为 no-op） ----------
-
-            // 指数：恒生消费（手工估值）、中证REITs全收益真实代码 932047、代理配置
-            migrationBuilder.Sql("""
-                INSERT INTO indexes (code, name, metric, low_threshold_percent, high_threshold_percent, window_years, proxy_code)
-                VALUES ('HSCGSI', '恒生消费', 'PeTtm', 30, 70, 10, NULL)
-                ON CONFLICT (code) DO NOTHING;
-                """);
-            migrationBuilder.Sql("""
-                INSERT INTO indexes (code, name, metric, low_threshold_percent, high_threshold_percent, window_years, proxy_code)
-                VALUES ('932047', '中证REITs全收益', 'None', 30, 70, 10, NULL)
-                ON CONFLICT (code) DO NOTHING;
-                """);
-            migrationBuilder.Sql("UPDATE indexes SET proxy_code = '000300' WHERE code = '930050';");
-            migrationBuilder.Sql("UPDATE indexes SET proxy_code = '000991' WHERE code = '931769';");
-            migrationBuilder.Sql("UPDATE indexes SET proxy_code = '000932' WHERE code = '931139';");
-
-            // 老库占位代码 CSIREIT → 932047，随后删除占位行
-            migrationBuilder.Sql("UPDATE funds SET tracked_index_code = '932047' WHERE tracked_index_code = 'CSIREIT';");
-            migrationBuilder.Sql("DELETE FROM indexes WHERE code = 'CSIREIT';");
-
-            // 基金：恒生消费挂接指数；A50 归入成长赛道；7日理财+ 改货币基金/货币赛道/去掉括号
-            migrationBuilder.Sql("UPDATE funds SET tracked_index_code = 'HSCGSI' WHERE code = '024393';");
-            migrationBuilder.Sql("UPDATE funds SET sector_id = 5 WHERE code = '022849';");
-            migrationBuilder.Sql("UPDATE funds SET name = '7日理财+', type = 'Money', sector_id = 10 WHERE code = '7R0001';");
-            migrationBuilder.Sql("UPDATE funds SET use_manual_value = true WHERE code IN ('018092', '7R0001');");
-
-            // 持仓累计本金（按支付宝截图收益率反推）
-            migrationBuilder.Sql("""
-                UPDATE holdings SET cost_amount = v.cost
-                FROM (VALUES
-                    ('024393', 695.20),
-                    ('022849', 250.00),
-                    ('020602', 543.47),
-                    ('501060', 150.00),
-                    ('028272', 199.86),
-                    ('160218', 100.00),
-                    ('004672', 738.49),
-                    ('008975', 299.57),
-                    ('015282', 197.19),
-                    ('001550', 200.00)
-                ) AS v(code, cost)
-                WHERE holdings.fund_code = v.code;
-                """);
-
-            // 7日理财+ 手工市值按最新截图 1013.13
-            migrationBuilder.Sql("UPDATE manual_values SET market_value = 1013.13 WHERE fund_code = '7R0001';");
-
-            // 恒生消费手工估值（管理人披露：PE≈15、近5年约5%分位；蛋卷未覆盖，刷新时保留 MANUAL）
-            migrationBuilder.Sql("""
-                INSERT INTO index_valuations
-                    (index_code, trade_date, pe_ttm, pe_percentile, pb, pb_percentile, resolved_code, source, fetched_at)
-                VALUES ('HSCGSI', DATE '2026-09-10', 15, 5, NULL, NULL, NULL, 'MANUAL', now())
-                ON CONFLICT (index_code, trade_date) DO NOTHING;
-                """);
-
-            // 定投全局设置：单次固定 50 元
-            migrationBuilder.Sql("""
-                INSERT INTO dca_settings (id, fixed_invest_amount, updated_at)
-                VALUES (1, 50, now())
-                ON CONFLICT (id) DO NOTHING;
-                """);
+            // 参考数据（指数/基金/定投设置）已移到 Catalog/fund-catalog.json + FundCatalogSeeder，
+            // 迁移只保留结构变更，避免历史里混入业务数据。
         }
 
         /// <inheritdoc />

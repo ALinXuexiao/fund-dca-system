@@ -306,6 +306,8 @@ export interface SectorOption {
   id: number
   name: string
   isEquity: boolean
+  /** 基金档案页下拉按此排序；导入对账接口不返回该字段 */
+  sortOrder?: number
 }
 
 export interface ImportSummary {
@@ -355,4 +357,28 @@ export interface PositionVersion {
   isCurrent: boolean
   summary: string | null
   itemCount: number
+}
+
+// ===== 基金档案：手工新增 =====
+
+export interface IndexOption {
+  code: string
+  name: string
+  metric: string
+}
+
+export interface FundOptions {
+  sectors: SectorOption[]
+  indexes: IndexOption[]
+}
+
+export interface CreateFundInput {
+  code: string
+  name: string
+  type: FundType
+  sectorId: number | null
+  trackedIndexCode: string | null
+  buyFeeRate: number | null
+  dividendMethod: string
+  useManualValue: boolean
 }

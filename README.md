@@ -123,7 +123,7 @@ flowchart LR
 | 项目                | 职责                                   | 依赖         |
 | ----------------- | ------------------------------------ | ---------- |
 | `FundDca.Core`    | 领域模型、枚举、**纯函数规则引擎**                  | 无          |
-| `FundDca.Data`    | EF Core `DbContext`、迁移、种子数据、镜像同步     | Core       |
+| `FundDca.Data`    | EF Core `DbContext`、迁移、基金目录、种子数据、镜像同步 | Core       |
 | `FundDca.Collect` | 净值 / 估值 / 行情采集与编排                    | Core, Data |
 | `FundDca.Import`  | 资产证明解析（CSV / Excel / PDF）            | Core, Data |
 | `FundDca.Api`     | Web API 宿主、Controllers、Services 聚合编排 | 全部         |
@@ -301,7 +301,7 @@ dotnet run --project src/FundDca.Api
 ```
 
 - 默认监听 `http://localhost:5000`
-- **启动时自动执行 EF 迁移并写入种子数据**（首次运行会建表 + 灌入演示持仓）
+- **启动时自动执行 EF 迁移并对齐内嵌基金目录**（迁移只做结构变更；首次建库会额外灌入演示持仓）
 - 开发环境下 OpenAPI 文档映射在 `/openapi`，健康检查在 `/health`
 
 ### 4. 手动启动前端（单独调试时使用）
@@ -384,11 +384,13 @@ npm run build     # 产物输出到 dist/
 
 ### 基金档案
 
-| 方法  | 路径                               | 说明                     |
-| --- | -------------------------------- | ---------------------- |
-| GET | `/api/funds`                     | 全部基金档案（按赛道排序）          |
-| GET | `/api/funds/{code}`              | 单只基金档案                 |
-| PUT | `/api/funds/{code}/manual-value` | 手工维护市值（仅货币基金 / 手工市值标的） |
+| 方法   | 路径                               | 说明                            |
+| ---- | -------------------------------- | ----------------------------- |
+| GET  | `/api/funds`                     | 全部基金档案（按赛道排序）                 |
+| GET  | `/api/funds/{code}`              | 单只基金档案                        |
+| GET  | `/api/funds/options`             | 新增基金弹窗的赛道 / 已建档指数下拉数据         |
+| POST | `/api/funds`                     | 手工新增基金档案（权益类必须选权益赛道；货币类强制手工市值） |
+| PUT  | `/api/funds/{code}/manual-value` | 手工维护市值（仅货币基金 / 手工市值标的）        |
 
 ### 定投决策与设置
 
@@ -564,7 +566,9 @@ git log --oneline
 
 ## 开发里程碑
 
-各阶段的数据库迁移完整保留了演进过程：
+迁移只保留结构演进；基金、指数、赛道等**参考数据**由
+`src/FundDca.Data/Catalog/fund-catalog.json` + `FundCatalogSeeder` 在每次启动时幂等对齐
+（缺则插、已有不覆盖，只回填为空的跟踪指数与申购费率）。新增基金只改 JSON，不再产生迁移记录。
 
 | 阶段 | 迁移                                                                        | 内容                    |
 | -- | ------------------------------------------------------------------------- | --------------------- |
@@ -573,8 +577,8 @@ git log --oneline
 | M2 | `M2_ValuationDecision`                                                    | 指数估值、定投决策             |
 | M3 | `M3_Buy_Trades` / `M3_Trade_Cancel_StatusLength` / `M3_Import_PendingFix` | 买入流水、撤销、资产证明导入对账与版本回滚 |
 | M4 | `M4_EarningsYieldMetric`                                                  | 盈利收益率（E/P）估值口径        |
-| M5 | `M5_Proxy`                                                                | 估值代理指数                |
-| M6 | `M6_FixTrackedIndex`                                                      | 跟踪指数修正                |
-| M7 | `M7_ValuationProxy`                                                       | 估值代理与中证兜底             |
-| M8 | `M8_CsiOwnPe`                                                             | 中证官网自有 PE 历史          |
+
+> 老库的 `__EFMigrationsHistory` 里仍保留 M5–M16 的历史行。EF 不会因为迁移文件被删除而清理这些行，
+> 它们也不参与任何运行时逻辑；**不要手工删除**——若旧版本程序再次连库，会把一次性数据修正
+> （如 M12 的份额修正）当作未执行而重新跑一遍。
 

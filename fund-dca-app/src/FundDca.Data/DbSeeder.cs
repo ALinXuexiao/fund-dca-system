@@ -18,66 +18,17 @@ public static class DbSeeder
     {
         await db.Database.MigrateAsync();
 
-        if (await db.Funds.AnyAsync())
+        // 全新库判定必须在目录播种之前：目录每次启动都会补数据，不能再用"有没有基金"当个人数据的闸门
+        var isNewDatabase = !await db.Funds.AnyAsync();
+
+        // 参考数据（赛道/指数/基金档案）每次启动幂等对齐
+        await FundCatalogSeeder.SeedAsync(db);
+        await EnsureDcaSettingAsync(db);
+
+        if (!isNewDatabase)
         {
             return;
         }
-
-        // ---------- 赛道 ----------
-        var sectors = new List<Sector>
-        {
-            new() { Id = 1, Name = "大盘", LimitPercent = 15m, IsEquity = true, SortOrder = 10 },
-            new() { Id = 2, Name = "中盘", LimitPercent = 15m, IsEquity = true, SortOrder = 20 },
-            new() { Id = 3, Name = "小盘", LimitPercent = 15m, IsEquity = true, SortOrder = 30 },
-            new() { Id = 4, Name = "价值", LimitPercent = 15m, IsEquity = true, SortOrder = 40 },
-            new() { Id = 5, Name = "成长", LimitPercent = 15m, IsEquity = true, SortOrder = 50 },
-            new() { Id = 7, Name = "消费", LimitPercent = 15m, IsEquity = true, SortOrder = 70 },
-            new() { Id = 8, Name = "科技", LimitPercent = 15m, IsEquity = true, SortOrder = 80 },
-            new() { Id = 11, Name = "医药", LimitPercent = 15m, IsEquity = true, SortOrder = 84 },
-            new() { Id = 12, Name = "地产", LimitPercent = 15m, IsEquity = true, SortOrder = 86 },
-            new() { Id = 13, Name = "REITs", LimitPercent = 15m, IsEquity = true, SortOrder = 88 },
-            new() { Id = 9, Name = "债券", LimitPercent = 100m, IsEquity = false, SortOrder = 90 },
-            new() { Id = 10, Name = "货币", LimitPercent = 100m, IsEquity = false, SortOrder = 100 },
-        };
-        await db.Sectors.AddRangeAsync(sectors);
-
-        // ---------- 指数（蛋卷未覆盖的内部走代理或手工估值；代理不对前端展示） ----------
-        var indexes = new List<IndexInfo>
-        {
-            new() { Code = "930050", Name = "中证A50", Metric = ValuationMetric.PeTtm, ProxyCode = "000300" },
-            new() { Code = "H30269", Name = "中证红利低波动", Metric = ValuationMetric.EarningsYield, LowThresholdPercent = 10m, HighThresholdPercent = 6.4m },
-            new() { Code = "931069", Name = "中金300", Metric = ValuationMetric.EarningsYield, LowThresholdPercent = 10m, HighThresholdPercent = 6.4m },
-            new() { Code = "932047", Name = "中证REITs全收益", Metric = ValuationMetric.None },
-            new() { Code = "399393", Name = "国证房地产", Metric = ValuationMetric.Pb },
-            new() { Code = "931139", Name = "中证消费50", Metric = ValuationMetric.PeTtm, ProxyCode = "000932" },
-            new() { Code = "HSTECH", Name = "恒生科技", Metric = ValuationMetric.PeTtm },
-            new() { Code = "HSCGSI", Name = "恒生消费", Metric = ValuationMetric.PeTtm },
-            new() { Code = "000978", Name = "中证医药100", Metric = ValuationMetric.PeTtm },
-            // 代理目标指数
-            new() { Code = "000300", Name = "沪深300", Metric = ValuationMetric.PeTtm },
-            new() { Code = "000932", Name = "中证主要消费", Metric = ValuationMetric.PeTtm },
-        };
-        // M2 迁移会以 ON CONFLICT DO NOTHING 幂等补入 HSCGSI / 932047（老库修正）；全新库播种时跳过已存在的指数
-        var existingIndexCodes = await db.Indexes.Select(i => i.Code).ToListAsync();
-        await db.Indexes.AddRangeAsync(indexes.Where(i => !existingIndexCodes.Contains(i.Code)));
-
-        // ---------- 基金档案（12 个标的；7日理财+ 为 9 只子产品合并，按货币基金手工维护） ----------
-        var funds = new List<Fund>
-        {
-            New("024393", "永赢恒生消费指数(QDII)A", FundType.Qdii, 7, "HSCGSI"),
-            New("022849", "招商中证A50指数增强A", FundType.Stock, 5, "930050"),
-            New("020602", "易方达红利低波ETF联接A", FundType.Stock, 4, "H30269"),
-            New("501060", "中金中证优选300指数(LOF)A", FundType.Stock, 4, "931069"),
-            New("028272", "中金中证REITs全收益指数(FOF)A", FundType.Mixed, 13, "932047"),
-            New("160218", "国泰国证房地产行业指数(LOF)A", FundType.Stock, 12, "399393"),
-            New("004672", "华夏短债债券A", FundType.Bond, 9, null),
-            New("008975", "富国中证消费50ETF联接A", FundType.Stock, 7, "931139"),
-            New("015282", "华安恒生科技ETF联接(QDII)A", FundType.Qdii, 8, "HSTECH"),
-            New("001550", "天弘中证医药100指数A", FundType.Stock, 11, "000978"),
-            New("018092", "兴银现金添利货币C", FundType.Money, 10, null, manual: true),
-            New("7R0001", "7日理财+", FundType.Money, 10, null, manual: true),
-        };
-        await db.Funds.AddRangeAsync(funds);
 
         // ---------- 当前持仓（份额来自资产证明；成本=支付宝截图"市值-持有收益"反推） ----------
         var now = DateTimeOffset.UtcNow;
@@ -146,8 +97,6 @@ public static class DbSeeder
             });
         }
 
-        // 注：定投全局设置单行（Id=1，固定 50 元）由 M2 迁移以 ON CONFLICT DO NOTHING 幂等写入，此处不再重复种子
-
         // ---------- 当月预算资金池（银行卡，不计入 D；默认演示值，页面可改） ----------
         await db.BudgetMonths.AddAsync(new BudgetMonth
         {
@@ -159,17 +108,21 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
-    private static Fund New(string code, string name, FundType type, int sectorId, string? indexCode, bool manual = false) =>
-        new()
+    /// <summary>定投全局设置单行（Id=1，默认 50 元）：缺则补，已有不覆盖用户改过的金额。</summary>
+    private static async Task EnsureDcaSettingAsync(FundDcaDbContext db)
+    {
+        if (await db.DcaSettings.AnyAsync(s => s.Id == 1))
         {
-            Code = code,
-            Name = name,
-            Type = type,
-            SectorId = sectorId,
-            TrackedIndexCode = indexCode,
-            UseManualValue = manual,
-            DividendMethod = "REINVEST",
-        };
+            return;
+        }
+        db.DcaSettings.Add(new DcaSetting
+        {
+            Id = 1,
+            FixedInvestAmount = 50m,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
 
     private static Holding H(string code, decimal shares, decimal cost) =>
         new() { FundCode = code, Shares = shares, CostAmount = cost };

@@ -143,6 +143,23 @@ input.num {
 }
 input.num:focus { outline: none; border-color: var(--accent); }
 
+/* 新增基金弹窗表单 */
+.form-grid {
+  display: grid; grid-template-columns: 86px 1fr; gap: 10px 12px; align-items: center;
+  font-size: 13px;
+}
+.form-grid > label { color: var(--ink-2); text-align: right; }
+.form-grid input[type="text"],
+.form-grid input[type="number"],
+.form-grid select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  font-size: 13px; background: #fff; color: var(--ink);
+}
+.form-grid input:focus, .form-grid select:focus { outline: none; border-color: var(--accent); }
+.form-grid label.check { text-align: left; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.form-error { color: var(--danger); font-size: 12.5px; margin-top: 10px; }
+.modal .body.wide { max-height: 70vh; }
+
 .hint-msg { padding: 30px; text-align: center; color: var(--muted); }
 .error-box {
   background: #fdecea; border: 1px solid #f5c6c0; color: #8e2f23;

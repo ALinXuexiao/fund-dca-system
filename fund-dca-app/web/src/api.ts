@@ -11,6 +11,8 @@ import type {
   ImportPreview,
   PositionVersion,
   Intraday,
+  FundOptions,
+  CreateFundInput,
 } from './types'
 
 /**
@@ -73,6 +75,31 @@ export async function waitForBackend(timeoutMs = 60_000, intervalMs = 1_000): Pr
 
 export function fetchFunds(): Promise<FundListItem[]> {
   return getJson('/api/funds')
+}
+
+/** 新增基金弹窗的下拉数据（赛道 + 已建档指数）。 */
+export function fetchFundOptions(): Promise<FundOptions> {
+  return getJson('/api/funds/options')
+}
+
+/** 手工新增基金档案（导入建档之外的第二条入口）。 */
+export async function createFund(input: CreateFundInput): Promise<FundListItem> {
+  const res = await request('/api/funds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    let msg = `新增基金失败：HTTP ${res.status}`
+    try {
+      const body = (await res.json()) as { message?: string }
+      if (body?.message) msg = body.message
+    } catch {
+      // 非 JSON 错误体，保留状态码提示
+    }
+    throw new Error(msg)
+  }
+  return (await res.json()) as FundListItem
 }
 
 export function fetchDashboard(): Promise<Dashboard> {
