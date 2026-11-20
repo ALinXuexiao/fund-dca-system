@@ -14,12 +14,12 @@ public static class DbSeeder
 {
     private static readonly DateOnly ProofDate = new(2026, 9, 10);
 
-    public static async Task SeedAsync(FundDcaDbContext db)
+    public static async Task SeedAsync(FundDcaDbContext db, CancellationToken ct = default)
     {
-        await db.Database.MigrateAsync();
+        await db.Database.MigrateAsync(ct);
 
         // 全新库判定必须在目录播种之前：目录每次启动都会补数据，不能再用"有没有基金"当个人数据的闸门
-        var isNewDatabase = !await db.Funds.AnyAsync();
+        var isNewDatabase = !await db.Funds.AnyAsync(ct);
 
         // 参考数据（赛道/指数/基金档案）每次启动幂等对齐
         await FundCatalogSeeder.SeedAsync(db);

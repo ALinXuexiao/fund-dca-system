@@ -5,6 +5,7 @@ using FundDca.Data;
 using FundDca.Import.Parsing;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,21 +78,38 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 
 var app = builder.Build();
 
-// 启动即迁移并写入种子数据（M0 便利做法；M5 改为发布流程执行）
-using (var scope = app.Services.CreateScope())
+// 启动即迁移并写入种子数据（M0 便利做法；M5 改为发布流程执行）。
+// 云端库在跨境链路上会出现握手丢包、或解析到不可达边缘后整段读超时：
+// 这类失败重试即可跨过，不能让一次握手失败直接结束进程——否则前端永远停在"后端未就绪"。
+// 单次尝试必须有硬超时：连接半开时 Npgsql 的读会一直挂着而不抛异常，没有超时就等不到重试。
+const int startupAttempts = 5;
+var attemptTimeout = TimeSpan.FromSeconds(45);
+for (var attempt = 1; ; attempt++)
 {
-    var db = scope.ServiceProvider.GetRequiredService<FundDcaDbContext>();
-    await DbSeeder.SeedAsync(db);
-    app.Logger.LogInformation("数据库就绪：基金 {Funds} 只，指数 {Indexes} 个",
-        await db.Funds.CountAsync(), await db.Indexes.CountAsync());
+    try
+    {
+        using var attemptCts = new CancellationTokenSource(attemptTimeout);
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FundDcaDbContext>();
+        await DbSeeder.SeedAsync(db, attemptCts.Token);
+        app.Logger.LogInformation("数据库就绪：基金 {Funds} 只，指数 {Indexes} 个",
+            await db.Funds.CountAsync(attemptCts.Token), await db.Indexes.CountAsync(attemptCts.Token));
 
-    // M3：首次启动把当前持仓固化为基线版本，供导入对账回滚
-    var importService = scope.ServiceProvider.GetRequiredService<ImportService>();
-    await importService.EnsureBaselineAsync(default);
+        // M3：首次启动把当前持仓固化为基线版本，供导入对账回滚
+        var importService = scope.ServiceProvider.GetRequiredService<ImportService>();
+        await importService.EnsureBaselineAsync(attemptCts.Token);
 
-    // 启动即同步一次本地镜像（本机无本地库时自动跳过并告警，不影响启动）
-    var synchronizer = scope.ServiceProvider.GetRequiredService<LocalMirrorSynchronizer>();
-    await synchronizer.SyncNowAsync();
+        // 启动即同步一次本地镜像（本机无本地库时自动跳过并告警，不影响启动）
+        var synchronizer = scope.ServiceProvider.GetRequiredService<LocalMirrorSynchronizer>();
+        await synchronizer.SyncNowAsync();
+        break;
+    }
+    catch (Exception ex) when (attempt < startupAttempts && IsTransientDbFailure(ex))
+    {
+        app.Logger.LogWarning("数据库连接失败（第 {Attempt}/{Total} 次尝试，单次上限 {Timeout} 秒）：{Reason}；3 秒后重试",
+            attempt, startupAttempts, attemptTimeout.TotalSeconds, ex.GetBaseException().Message);
+        await Task.Delay(TimeSpan.FromSeconds(3));
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -105,3 +123,20 @@ app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTimeOffset.Now }));
 
 app.Run();
+
+/// <summary>
+/// 判断启动期的数据库失败是否属于可重试的链路问题。
+/// 服务端明确返回的 SQL 错误（如迁移脚本本身有问题）重试无意义，直接抛出。
+/// </summary>
+static bool IsTransientDbFailure(Exception ex) => ex switch
+{
+    PostgresException => false,
+    NpgsqlException { InnerException: PostgresException } => false,
+    // 断流、读超时、SSL 握手失败、主机不可达
+    NpgsqlException => true,
+    TimeoutException => true,
+    // 单次尝试的硬超时（连接半开时只能靠它打断）
+    OperationCanceledException => true,
+    System.Net.Sockets.SocketException => true,
+    _ => ex.InnerException is not null && IsTransientDbFailure(ex.InnerException),
+};
