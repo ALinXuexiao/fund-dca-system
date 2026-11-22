@@ -4,7 +4,7 @@ import type {
   RefreshReport,
   Decision,
   ValuationRefreshReport,
-  BuyResult,
+  TradeResult,
   PendingTrade,
   CommitDecision,
   CommitResult,
@@ -173,26 +173,26 @@ export function refreshValuations(): Promise<ValuationRefreshReport> {
   return postJson('/api/collect/refresh-valuations')
 }
 
-// ---------- M3 买入流水 ----------
+// ---------- M3 交易流水 ----------
 
-/** 登记一笔买入（登记即预入账；T 日净值到位后自动校正）。 */
-export async function recordBuy(code: string, amount: number): Promise<BuyResult> {
-  const { res, json } = await postJsonRaw<BuyResult & { message?: string }>('/api/trades', {
+/** 登记一笔交易：正数买入、负数卖出（卖出费率 0）；登记即预入账，T 日净值到位后自动校正。 */
+export async function recordTrade(code: string, amount: number): Promise<TradeResult> {
+  const { res, json } = await postJsonRaw<TradeResult & { message?: string }>('/api/trades', {
     fundCode: code,
     amount,
   })
   if (!res.ok) {
-    throw new Error(json?.message || `买入登记失败：HTTP ${res.status}`)
+    throw new Error(json?.message || `交易登记失败：HTTP ${res.status}`)
   }
   return json
 }
 
-/** 未确认（等 T 日净值）的买入流水，用于"待确认 ×N"角标与撤销列表。 */
+/** 未确认（等 T 日净值）的交易流水，用于"待确认 ×N"角标与撤销列表。 */
 export function fetchPendingTrades(): Promise<PendingTrade[]> {
   return getJson('/api/trades/pending')
 }
 
-/** 撤销一笔待确认买入（误记买入时反恢预入账，置 Cancelled）。 */
+/** 撤销一笔待确认交易（误记时反恢预入账，置 Cancelled）。 */
 export async function cancelTrade(id: number): Promise<{ cancelled: boolean; id: number }> {
   const res = await request(`/api/trades/${id}/cancel`, { method: 'POST' })
   let json: { message?: string } | null = null

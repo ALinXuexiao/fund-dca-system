@@ -7,9 +7,9 @@ namespace FundDca.Api.Controllers;
 [Route("api/[controller]")]
 public class TradesController(TradeService trades) : ControllerBase
 {
-    /// <summary>登记一笔买入：登记即预入账，T 日净值到位后自动校正。</summary>
+    /// <summary>登记一笔交易：正数买入，负数卖出；卖出费率 0。登记即预入账，T 日净值到位后自动校正。</summary>
     [HttpPost]
-    public async Task<IActionResult> Record([FromBody] RecordBuyDto body, CancellationToken ct)
+    public async Task<IActionResult> Record([FromBody] RecordTradeDto body, CancellationToken ct)
     {
         try
         {
@@ -17,7 +17,7 @@ public class TradesController(TradeService trades) : ControllerBase
                 ? d
                 : (DateOnly?)null;
 
-            var result = await trades.RecordBuyAsync(body.FundCode, body.Amount, tradeDate, ct);
+            var result = await trades.RecordTradeAsync(body.FundCode, body.Amount, tradeDate, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -26,12 +26,12 @@ public class TradesController(TradeService trades) : ControllerBase
         }
     }
 
-    /// <summary>待确认买入流水列表（前端"待确认 ×N"角标与明细）。</summary>
+    /// <summary>待确认交易流水列表（前端"待确认 ×N"角标与明细）。</summary>
     [HttpGet("pending")]
     public async Task<IReadOnlyList<PendingTradeInfo>> Pending(CancellationToken ct) =>
         await trades.ListPendingAsync(ct);
 
-    /// <summary>把待确认买入按 T 日净值校正入账（净值刷新后调用；通常自动）。</summary>
+    /// <summary>把待确认交易按 T 日净值校正入账（净值刷新后调用；通常自动）。</summary>
     [HttpPost("confirm-pending")]
     public async Task<IActionResult> ConfirmPending(CancellationToken ct)
     {
@@ -39,7 +39,7 @@ public class TradesController(TradeService trades) : ControllerBase
         return Ok(new { confirmed = count });
     }
 
-    /// <summary>撤销一笔待确认买入：反恢预入账，置 Cancelled（误记买入时用）。</summary>
+    /// <summary>撤销一笔待确认交易：反恢预入账，置 Cancelled（误记时用）。</summary>
     [HttpPost("{id:long}/cancel")]
     public async Task<IActionResult> Cancel(long id, CancellationToken ct)
     {
@@ -55,10 +55,11 @@ public class TradesController(TradeService trades) : ControllerBase
     }
 }
 
-public record RecordBuyDto
+public record RecordTradeDto
 {
     public required string FundCode { get; init; }
+    /// <summary>正数买入、负数卖出（金额绝对值）。</summary>
     public decimal Amount { get; init; }
-    /// <summary>买入日 T（缺省为今天）；string 便于前端直接传 yyyy-MM-dd。</summary>
+    /// <summary>交易日 T（缺省为今天）；string 便于前端直接传 yyyy-MM-dd。</summary>
     public string? TradeDate { get; init; }
 }

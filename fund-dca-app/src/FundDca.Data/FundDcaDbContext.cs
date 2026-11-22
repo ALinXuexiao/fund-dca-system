@@ -221,7 +221,7 @@ public class FundDcaDbContext : DbContext
             e.Property(x => x.FixedInvestAmount).HasPrecision(10, 2);
         });
 
-        // ---------- 交易流水（买入） ----------
+        // ---------- 交易流水（买入/卖出） ----------
         b.Entity<Trade>(e =>
         {
             e.ToTable("trades");
@@ -230,6 +230,7 @@ public class FundDcaDbContext : DbContext
             e.Property(x => x.Side).HasConversion<string>().HasMaxLength(8);
             e.Property(x => x.Amount).HasPrecision(18, 4);
             e.Property(x => x.EstimatedShares).HasPrecision(18, 4);
+            e.Property(x => x.CostAmount).HasPrecision(18, 4);
             e.Property(x => x.ConfirmedShares).HasPrecision(18, 4);
             e.Property(x => x.ConfirmedNav).HasPrecision(12, 5);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);

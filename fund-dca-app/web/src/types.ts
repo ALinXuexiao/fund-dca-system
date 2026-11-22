@@ -209,10 +209,12 @@ export const METRIC_LABEL: Record<string, string> = {
   EarningsYield: '盈利收益率',
 }
 
-// ---------- M3 买入流水 ----------
+// ---------- M3 交易流水 ----------
 
-export interface BuyResult {
+export interface TradeResult {
   id: number
+  /** Buy=买入，Sell=卖出 */
+  side: 'Buy' | 'Sell'
   fundCode: string
   fundName: string
   tradeDate: string
@@ -229,6 +231,7 @@ export interface BuyResult {
 
 export interface PendingTrade {
   id: number
+  side: 'Buy' | 'Sell'
   fundCode: string
   fundName: string
   tradeDate: string

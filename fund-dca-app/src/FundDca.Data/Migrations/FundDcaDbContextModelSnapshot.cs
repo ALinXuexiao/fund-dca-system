@@ -603,6 +603,11 @@ namespace FundDca.Data.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("confirmed_shares");
 
+                    b.Property<decimal?>("CostAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cost_amount");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");

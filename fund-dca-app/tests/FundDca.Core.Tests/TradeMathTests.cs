@@ -112,4 +112,44 @@ public class TradeMathTests
         Assert.Equal(55.0000m, TradeMath.AddShares(50m, 5m));
         Assert.Equal(150.0000m, TradeMath.AddCost(100m, 50m));
     }
+
+    [Fact]
+    public void 卖出费率0_金额100_按净值2点5_预减40份()
+    {
+        Assert.Equal(40.0000m, TradeMath.EstimateSellShares(100m, 2.5m));
+        Assert.Equal(40.0000m, TradeMath.ConfirmSellShares(100m, 2.5m));
+    }
+
+    [Fact]
+    public void 卖出按份额比例结转成本_剩余单位成本不变()
+    {
+        // 持仓 100 份、成本 200 元（单位成本 2.0），卖出 40 份 → 结转 80 元
+        var costBasis = TradeMath.ProportionalCost(200m, 100m, 40m);
+        Assert.Equal(80m, costBasis);
+        Assert.Equal(2.0m, (200m - costBasis) / (100m - 40m));
+    }
+
+    [Fact]
+    public void 卖出清仓_结转全部成本()
+    {
+        Assert.Equal(123.4567m, TradeMath.ProportionalCost(123.4567m, 88.8m, 88.8m));
+    }
+
+    [Fact]
+    public void 卖出成本未知_不结转()
+    {
+        Assert.Equal(0m, TradeMath.ProportionalCost(null, 100m, 40m));
+    }
+
+    [Fact]
+    public void 卖出待确认_净值上涨_回补差额份额()
+    {
+        // 原持仓 100 份；登记时净值 1.0 → 预减 50 份；T 日净值 1.1 → 实际 45.4545 份，
+        // 应回补 4.5455 份，最终持仓 = 100 - 45.4545 = 54.5455 份
+        const decimal originalShares = 100m;
+        const decimal estimatedShares = 50m;
+        var backfill = TradeMath.SellShareCorrection(50m, 1.1m, estimatedShares);
+        Assert.Equal(4.5455m, backfill);
+        Assert.Equal(54.5455m, TradeMath.AddShares(originalShares - estimatedShares, backfill));
+    }
 }

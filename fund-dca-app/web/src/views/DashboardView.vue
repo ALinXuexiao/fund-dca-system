@@ -9,7 +9,7 @@ import {
   refreshValuations,
   updateBudget,
   updateFixedInvestAmount,
-  recordBuy,
+  recordTrade,
   fetchPendingTrades,
   cancelTrade,
   fetchIntraday,
@@ -75,10 +75,10 @@ const draftInvested = ref<string | number>('')
 const editingFixed = ref(false)
 const draftFixed = ref('')
 
-// 记一笔买入（登记即预入账）
-const buyingCode = ref<string | null>(null)
-const draftBuy = ref('')
-const buying = ref(false)
+// 记一笔交易（正数买入、负数卖出；登记即预入账）
+const tradingCode = ref<string | null>(null)
+const draftTrade = ref('')
+const trading = ref(false)
 const pendingCount = ref(0)
 const pendingTrades = ref<PendingTrade[]>([])
 const showPending = ref(false)
@@ -470,32 +470,34 @@ async function saveFixed() {
   }
 }
 
-function startBuy(f: FundDecision | { code: string; name: string }) {
-  buyingCode.value = f.code
+function startTrade(f: FundDecision | { code: string; name: string }) {
+  tradingCode.value = f.code
   const suggested = 'suggestedAmount' in f ? f.suggestedAmount : 0
-  draftBuy.value = String(suggested || decision.value?.options.fixedInvestAmount || 50)
+  draftTrade.value = String(suggested || decision.value?.options.fixedInvestAmount || 50)
 }
 
-async function confirmBuy(f: FundDecision | { code: string; name: string }) {
-  const amount = Number(draftBuy.value)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    showToast('请输入正确的买入金额', true)
+async function confirmTrade(f: FundDecision | { code: string; name: string }) {
+  const amount = Number(draftTrade.value)
+  if (!Number.isFinite(amount) || amount === 0) {
+    showToast('请输入交易金额：正数买入，负数卖出', true)
     return
   }
-  buying.value = true
+  const isSell = amount < 0
+  trading.value = true
   try {
-    const r = await recordBuy(f.code, Math.round(amount * 100) / 100)
-    buyingCode.value = null
+    const r = await recordTrade(f.code, Math.round(amount * 100) / 100)
+    tradingCode.value = null
     await load(true)
+    const label = isSell ? '卖出' : '买入'
     showToast(
       r.confirmed
-        ? `${f.name} 已登记买入 ¥${fmtMoney(r.amount)}（按 T 日净值 ${r.nav} 确认）`
-        : `${f.name} 已登记买入 ¥${fmtMoney(r.amount)}，今晚净值到位后按 T 日收盘价确认份额`,
+        ? `${f.name} 已登记${label} ¥${fmtMoney(r.amount)}（按 T 日净值 ${r.nav} 确认）`
+        : `${f.name} 已登记${label} ¥${fmtMoney(r.amount)}，今晚净值到位后按 T 日收盘价确认份额`,
     )
   } catch (e) {
     showToast((e as Error).message, true)
   } finally {
-    buying.value = false
+    trading.value = false
   }
 }
 
@@ -520,7 +522,7 @@ async function confirmCancel(t: PendingTrade) {
     await cancelTrade(t.id)
     await loadPendingTrades()
     await load(true)
-    showToast(`已撤销 ${t.fundName} 的买入登记（¥${fmtMoney(t.amount)}），预入账已反恢`)
+    showToast(`已撤销 ${t.fundName} 的${t.side === 'Sell' ? '卖出' : '买入'}登记（¥${fmtMoney(t.amount)}），预入账已反恢`)
   } catch (e) {
     showToast((e as Error).message, true)
   } finally {
@@ -910,8 +912,8 @@ watch(
           <span>合计建议 <b style="color:var(--up)">¥{{ fmtMoney(decision.totalSuggested) }}</b></span>
           <span class="meta-sep">·</span>
           <span>投后预算剩余 ¥{{ fmtMoney(decision.remainingAfter) }}</span>
-          <span v-if="pendingCount > 0" class="pending-badge" @click="openPending" title="点击查看/撤销待确认的买入登记">
-            待确认买入 ×{{ pendingCount }}（点击管理）
+          <span v-if="pendingCount > 0" class="pending-badge" @click="openPending" title="点击查看/撤销待确认的交易登记">
+            待确认交易 ×{{ pendingCount }}（点击管理）
           </span>
         </div>
       </div>
@@ -961,20 +963,20 @@ watch(
               <span v-else style="color:var(--muted)">无数据</span>
             </td>
             <td style="text-align:center">
-              <template v-if="buyingCode === f.code">
-                <input v-model="draftBuy" class="num" type="number" min="1" step="1"
-                  style="width:64px;text-align:right" />
+              <template v-if="tradingCode === f.code">
+                <input v-model="draftTrade" class="num" type="number" step="1" title="正数买入，负数卖出"
+                  placeholder="正买/负卖" style="width:64px;text-align:right" />
                 <div style="display:flex;gap:4px;margin-top:4px">
-                  <button class="btn sm buy-btn" :disabled="buying" @click="confirmBuy(f)">记买入</button>
-                  <button class="btn sm ghost" style="padding:2px 8px" @click="buyingCode = null">取消</button>
+                  <button class="btn sm buy-btn" :disabled="trading" @click="confirmTrade(f)">记交易</button>
+                  <button class="btn sm ghost" style="padding:2px 8px" @click="tradingCode = null">取消</button>
                 </div>
               </template>
               <template v-else>
                 <b :style="{ color: f.suggestedAmount > 0 ? 'var(--up)' : 'var(--muted)' }">
                   {{ f.suggestedAmount > 0 ? '¥' + fmtMoney(f.suggestedAmount) : '¥0 建议' }}
                 </b>
-                <button class="btn sm ghost buy-btn"
-                  style="display:block;margin-top:4px" @click="startBuy(f)">记一笔买入</button>
+                <button class="btn sm ghost buy-btn" title="正数买入，负数卖出"
+                  style="display:block;margin-top:4px" @click="startTrade(f)">记一笔交易</button>
               </template>
             </td>
             <td class="l wrap">
@@ -1009,21 +1011,22 @@ watch(
       </div>
     </div>
 
-    <!-- 待确认买入管理弹窗 -->
+    <!-- 待确认交易管理弹窗 -->
     <div v-if="showPending" class="modal-mask" @click.self="showPending = false">
       <div class="modal">
-        <header>待确认买入（今晚净值到位后自动按 T 日收盘价确认份额）</header>
+        <header>待确认交易（今晚净值到位后自动按 T 日收盘价确认份额）</header>
         <div class="body">
           <template v-if="pendingTrades.length">
             <p style="margin:0 0 10px;color:var(--ink-2);font-size:13px">
-              下面这些是先登记、尚未按当日净值确认的买入。如属误记，可撤销（会同步反恢本金与预算预占）。
+              下面这些是先登记、尚未按当日净值确认的交易。如属误记，可撤销（会同步反恢份额、本金与预算预占）。
             </p>
             <div class="pending-list">
               <div v-for="t in pendingTrades" :key="t.id" class="pending-row">
                 <div class="pending-info">
+                  <b :style="{ color: t.side === 'Sell' ? '#b45309' : '#1e40af' }">{{ t.side === 'Sell' ? '卖出' : '买入' }}</b>
                   <span class="pending-fund">{{ t.fundName }}</span>
                   <code>{{ t.fundCode }}</code>
-                  <span class="pending-meta">{{ t.tradeDate }} · ¥{{ fmtMoney(t.amount) }} · 预占 {{ t.estimatedShares }} 份</span>
+                  <span class="pending-meta">{{ t.tradeDate }} · ¥{{ fmtMoney(t.amount) }} · {{ t.side === 'Sell' ? '预减' : '预占' }} {{ t.estimatedShares }} 份</span>
                 </div>
                 <button class="btn sm danger" :disabled="cancelling === t.id" @click="confirmCancel(t)">
                   {{ cancelling === t.id ? '撤销中…' : '撤销' }}
@@ -1031,7 +1034,7 @@ watch(
               </div>
             </div>
           </template>
-          <p v-else style="margin:4px 0;color:var(--muted)">当前没有待确认的买入。</p>
+          <p v-else style="margin:4px 0;color:var(--muted)">当前没有待确认的交易。</p>
         </div>
         <footer>
           <button class="btn" @click="showPending = false">关闭</button>
@@ -1121,14 +1124,15 @@ watch(
             </td>
             <td style="text-align:center">
               <template v-if="!r.isMoney">
-                <template v-if="buyingCode === r.code">
-                  <input v-model="draftBuy" class="num" type="number" min="1" step="1"
-                         style="width:60px;text-align:right" />
-                  <button class="btn sm buy-btn" style="margin-left:4px;padding:3px 8px" :disabled="buying"
-                          @click="confirmBuy(r)">记买入</button>
-                  <button class="btn sm ghost" style="margin-left:2px;padding:3px 8px" @click="buyingCode = null">取消</button>
+                <template v-if="tradingCode === r.code">
+                  <input v-model="draftTrade" class="num" type="number" step="1" title="正数买入，负数卖出"
+                         placeholder="正买/负卖" style="width:60px;text-align:right" />
+                  <button class="btn sm buy-btn" style="margin-left:4px;padding:3px 8px" :disabled="trading"
+                          @click="confirmTrade(r)">记交易</button>
+                  <button class="btn sm ghost" style="margin-left:2px;padding:3px 8px" @click="tradingCode = null">取消</button>
                 </template>
-                <button v-else class="btn sm ghost" style="padding:3px 12px" @click="startBuy(r)">记一笔买入</button>
+                <button v-else class="btn sm ghost" title="正数买入，负数卖出"
+                        style="padding:3px 12px" @click="startTrade(r)">记一笔交易</button>
               </template>
               <button v-else-if="editingCode !== r.code" class="btn sm ghost"
                       style="padding:3px 12px" @click="startEdit(r)">编辑</button>
@@ -1207,7 +1211,7 @@ tr.rowzero td { opacity: .62; }
 }
 .meta-sep { color: #c9ced8; }
 
-/* 待确认买入角标 */
+/* 待确认交易角标 */
 .pending-badge {
   display: inline-flex;
   align-items: center;
@@ -1223,7 +1227,7 @@ tr.rowzero td { opacity: .62; }
 }
 .pending-badge:hover { filter: brightness(.96); }
 
-/* 待确认买入弹窗 */
+/* 待确认交易弹窗 */
 .pending-list { display: flex; flex-direction: column; gap: 8px; }
 .pending-row {
   display: flex;
@@ -1246,7 +1250,7 @@ tr.rowzero td { opacity: .62; }
 }
 .btn.sm.danger:hover:not(:disabled) { background: #ffe3e1; }
 
-/* 记一笔买入按钮 */
+/* 记一笔交易按钮 */
 .buy-btn {
   font-size: 12px;
   padding: 2px 10px;
