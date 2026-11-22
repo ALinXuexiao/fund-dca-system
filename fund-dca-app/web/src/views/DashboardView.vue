@@ -973,7 +973,7 @@ watch(
               </template>
               <template v-else>
                 <b :style="{ color: f.suggestedAmount > 0 ? 'var(--up)' : 'var(--muted)' }">
-                  {{ f.suggestedAmount > 0 ? '¥' + fmtMoney(f.suggestedAmount) : '¥0 建议' }}
+                  {{ f.suggestedAmount > 0 ? '¥' + fmtMoney(f.suggestedAmount) : '¥0' }}
                 </b>
                 <button class="btn sm ghost buy-btn" title="正数买入，负数卖出"
                   style="display:block;margin-top:4px" @click="startTrade(f)">记一笔交易</button>
@@ -1069,7 +1069,7 @@ watch(
             <th>净值日期</th>
             <th>单位净值</th>
             <th>日涨跌</th>
-            <th>盘中估算<span class="th-sub">已确认=真实净值</span></th>
+            <th>盘中估算<span class="th-sub">含真实净值</span></th>
             <th>份额</th>
             <th>当前市值</th>
             <th>占比</th>
