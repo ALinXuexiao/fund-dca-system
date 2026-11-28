@@ -9,7 +9,8 @@ namespace FundDca.Data;
 /// 与 <see cref="DbSeeder"/> 的分工：
 /// <list type="bullet">
 /// <item>目录每次启动都执行，逐条幂等——缺的补上，已有的不覆盖；</item>
-/// <item>已有档案只回填为空的跟踪指数/申购费率（导入自动建档时最容易缺这两项）。</item>
+/// <item>已有档案只回填为空的跟踪指数/申购费率（导入自动建档时最容易缺这两项）；</item>
+/// <item>已有档案的赛道以目录为准（系统没有改赛道的接口，赛道调整只能改目录 JSON）。</item>
 /// </list>
 /// 数据源是内嵌的 Catalog/fund-catalog.json：新增基金只改 JSON，不再产生数据库迁移记录。
 /// </summary>
@@ -69,11 +70,22 @@ public static class FundCatalogSeeder
         }
         await db.SaveChangesAsync(ct);
 
-        // ---------- 基金：缺则插；已有只回填空字段 ----------
+        // ---------- 基金：缺则插；已有只回填空字段 + 对齐赛道 ----------
         var sectorIdByName = await db.Sectors.ToDictionaryAsync(s => s.Name, s => s.Id, ct);
         var funds = await db.Funds.ToListAsync(ct);
         foreach (var f in catalog.Funds)
         {
+            int? sectorId = null;
+            if (!string.IsNullOrWhiteSpace(f.Sector))
+            {
+                if (!sectorIdByName.TryGetValue(f.Sector, out var sid))
+                {
+                    throw new InvalidOperationException(
+                        $"基金目录 {f.Code} 引用了不存在的赛道「{f.Sector}」，请检查 fund-catalog.json");
+                }
+                sectorId = sid;
+            }
+
             var existing = funds.FirstOrDefault(x => x.Code == f.Code);
             if (existing is not null)
             {
@@ -85,18 +97,11 @@ public static class FundCatalogSeeder
                 {
                     existing.BuyFeeRate = f.BuyFeeRate;
                 }
-                continue;
-            }
-
-            int? sectorId = null;
-            if (!string.IsNullOrWhiteSpace(f.Sector))
-            {
-                if (!sectorIdByName.TryGetValue(f.Sector, out var sid))
+                if (sectorId is { } targetSectorId && existing.SectorId != targetSectorId)
                 {
-                    throw new InvalidOperationException(
-                        $"基金目录 {f.Code} 引用了不存在的赛道「{f.Sector}」，请检查 fund-catalog.json");
+                    existing.SectorId = targetSectorId;
                 }
-                sectorId = sid;
+                continue;
             }
 
             db.Funds.Add(new Fund

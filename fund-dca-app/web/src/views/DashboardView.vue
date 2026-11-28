@@ -89,6 +89,7 @@ const SECTOR_COLORS: Record<string, string> = {
   大盘: '#1e40af', // 深蓝
   中盘: '#0d9488', // 墨青
   小盘: '#ca8a04', // 金黄
+  微盘: '#b91c1c', // 深绯红
   价值: '#7c3aed', // 紫罗兰
   成长: '#84cc16', // 黄绿
   消费: '#ea580c', // 橙

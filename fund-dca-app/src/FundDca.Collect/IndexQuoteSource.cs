@@ -80,7 +80,7 @@ public sealed class EastMoneyIndexQuoteSource(HttpClient http, ILogger<EastMoney
 
     /// <summary>
     /// 系统内指数代码 → 东财 secid（市场码.代码）。无对应行情口径的返回 null。
-    /// 市场码：1=上交所指数、0=深交所/国证指数、2=中证指数、124=港股指数。
+    /// 市场码：1=上交所指数、0=深交所/国证/北交所指数、2=中证指数、124=港股指数。
     /// </summary>
     public static string? ToSecId(string code) => code switch
     {
@@ -88,6 +88,8 @@ public sealed class EastMoneyIndexQuoteSource(HttpClient http, ILogger<EastMoney
         "HSTECH" => "124.HSTECH",
         "HSCGSI" => "124.HSCGSI",
         "HSI" => "124.HSI",
+        // 北交所指数（北证50 等 899xxx，东财市场码同为 0）
+        _ when code.Length == 6 && code.StartsWith("899", StringComparison.Ordinal) => $"0.{code}",
         // 深交所 / 国证
         _ when code.StartsWith("399", StringComparison.Ordinal) => $"0.{code}",
         // 中证指数：93xxxx 与 H 系列（H30269 等）

@@ -172,7 +172,7 @@ onMounted(loadAll)
       <div class="asof">共 <b>{{ funds.length }}</b> 只基金 ·
         权益 <b>{{ funds.filter((f) => !isStableType(f.type)).length }}</b> 只 ·
         稳健 <b>{{ funds.filter((f) => isStableType(f.type)).length }}</b> 只 ·
-        赛道 <b>{{ groups.length }}</b> 个（大盘/中盘/小盘/价值/成长/消费/科技/债券/货币）
+        赛道 <b>{{ groups.length }}</b> 个（{{ groups.map((g) => g.name).join('/') }}）
       </div>
       <button class="btn" @click="openAdd">＋ 新增基金</button>
     </div>
